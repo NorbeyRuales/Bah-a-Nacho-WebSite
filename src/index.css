@@ -1,0 +1,180 @@
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import 'tailwindcss';
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 4px);
+  --radius-xl: calc(var(--radius) + 8px);
+  --font-display: 'Rajdhani', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+:root {
+  --background: #060d1a;
+  --foreground: #e8f0fe;
+  --card: #0d1f3c;
+  --card-foreground: #e8f0fe;
+  --primary: #1565ff;
+  --primary-foreground: #ffffff;
+  --secondary: #0a2a5e;
+  --secondary-foreground: #93c5fd;
+  --muted: #112040;
+  --muted-foreground: #64748b;
+  --accent: #00b4d8;
+  --accent-foreground: #060d1a;
+  --border: #1e3a5f;
+  --ring: #1565ff;
+  --radius: 8px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background-color: #060d1a;
+  color: #e8f0fe;
+  margin: 0;
+  padding: 0;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #060d1a;
+}
+::-webkit-scrollbar-thumb {
+  background: #1e3a5f;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #1565ff;
+}
+
+.font-display {
+  font-family: 'Rajdhani', system-ui, sans-serif;
+}
+.font-mono {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Gradient utilities */
+.gradient-ocean {
+  background: linear-gradient(135deg, #060d1a 0%, #0a1f4e 50%, #0a3a7a 100%);
+}
+.gradient-electric {
+  background: linear-gradient(135deg, #1565ff 0%, #00b4d8 100%);
+}
+.gradient-card {
+  background: linear-gradient(145deg, #0d1f3c 0%, #0a1628 100%);
+}
+
+/* Glass effect */
+.glass {
+  background: rgba(13, 31, 60, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(30, 58, 95, 0.6);
+}
+
+/* Metallic silver text */
+.text-silver {
+  color: #94a3b8;
+}
+
+/* Glow effects */
+.glow-blue {
+  box-shadow: 0 0 20px rgba(21, 101, 255, 0.3);
+}
+.glow-cyan {
+  box-shadow: 0 0 20px rgba(0, 180, 216, 0.3);
+}
+
+/* Animated underline */
+.nav-link {
+  position: relative;
+}
+.nav-link::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #1565ff, #00b4d8);
+  transition: width 0.3s ease;
+}
+.nav-link:hover::after,
+.nav-link.active::after {
+  width: 100%;
+}
+
+/* Product card hover */
+.product-card {
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+.product-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 40px rgba(21, 101, 255, 0.25);
+}
+
+/* Sidebar item */
+.sidebar-item {
+  transition: all 0.2s ease;
+}
+.sidebar-item:hover {
+  background: rgba(21, 101, 255, 0.12);
+  border-left: 3px solid #1565ff;
+}
+.sidebar-item.active {
+  background: rgba(21, 101, 255, 0.2);
+  border-left: 3px solid #00b4d8;
+}
+
+/* Table row hover */
+.table-row-hover:hover {
+  background: rgba(21, 101, 255, 0.08);
+}
+
+/* Badge pulse for notifications */
+@keyframes pulse-badge {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+.badge-pulse {
+  animation: pulse-badge 2s ease-in-out infinite;
+}
+
+/* Fade in animation */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in-up {
+  animation: fadeInUp 0.5s ease forwards;
+}
+
+/* Water wave decoration */
+@keyframes wave {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
