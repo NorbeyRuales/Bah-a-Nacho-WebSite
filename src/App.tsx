@@ -1,19 +1,37 @@
-import { useState, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Search, Menu, X, ChevronDown, ChevronRight, Star, Phone, Mail, MapPin,
   Clock, Anchor, Zap, Shield, Truck, Wrench,
   ChevronLeft, Filter, SlidersHorizontal, MessageCircle, Heart, Share2,
-  LayoutDashboard, Package, Tag, Building2, Users, ShoppingCart, Upload,
+  LayoutDashboard, Package, Tag, Building2, Users, ShoppingCart,
   FileSpreadsheet, BarChart3, Settings, Bell, LogOut, Plus, Edit2, Trash2,
-  Eye, Copy, Download, RefreshCw, AlertTriangle, CheckCircle, Info, TrendingUp,
-  TrendingDown, ArrowUpRight, ArrowDownRight, FileText, Database, History,
-  ChevronUp, MoreVertical, Grid, List, Bookmark, Award, Navigation,
+  Download, RefreshCw, AlertTriangle, CheckCircle,
+  TrendingDown, ArrowUpRight, ArrowDownRight, Database, History,
+  ChevronUp, Grid, List, Award, Navigation, UserRoundCog,
 } from 'lucide-react'
 import {
-  AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
+  AreaChart, Area, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts'
 import logoImg from './imports/image.png'
+import { LoginPage } from './features/auth/LoginPage'
+import { useAuth, type UserProfile } from './features/auth/AuthProvider'
+import { CustomerPortal } from './features/customer/CustomerPortal'
+import { UserManagement } from './features/admin/UserManagement'
+import {
+  getAuditPage,
+  getDashboardSnapshot,
+  getImportHistory,
+  getInventoryAlerts,
+  getInventoryExport,
+  getInventoryPage,
+  type AuditEntry,
+  type DashboardSnapshot,
+  type ImportHistoryEntry,
+  type InventoryAlert,
+  type InventoryProduct,
+  type InventorySort,
+} from './features/admin/adminService'
 
 // ─────────────────────────────────────────────
 // TYPES & DATA
@@ -39,10 +57,10 @@ type Product = {
   location: string
 }
 
-type View = 'home' | 'catalog' | 'product' | 'admin'
+type View = 'home' | 'catalog' | 'product' | 'account'
 type AdminView =
   | 'dashboard' | 'inventory' | 'products' | 'categories' | 'brands'
-  | 'suppliers' | 'clients' | 'orders' | 'import' | 'reports' | 'audit'
+  | 'suppliers' | 'clients' | 'users' | 'orders' | 'import' | 'reports' | 'audit'
   | 'notifications' | 'settings'
 
 const BRANDS = ['Yamaha', 'Mercury', 'Suzuki', 'Honda', 'Tohatsu', 'Evinrude', 'Johnson', 'BRP']
@@ -181,47 +199,7 @@ const FAQS = [
   { q: '¿Tienen taller de reparación de motores?', a: 'Contamos con taller especializado para diagnóstico y reparación de motores Yamaha, Mercury, Suzuki y Honda. Solicite su cita vía WhatsApp.' },
 ]
 
-// ─────────────────────────────────────────────
-// ADMIN DATA
-// ─────────────────────────────────────────────
-const inventoryChartData = [
-  { month: 'Ene', entradas: 145, salidas: 98, stock: 412 },
-  { month: 'Feb', entradas: 120, salidas: 110, stock: 422 },
-  { month: 'Mar', entradas: 200, salidas: 145, stock: 477 },
-  { month: 'Abr', entradas: 180, salidas: 160, stock: 497 },
-  { month: 'May', entradas: 95, salidas: 185, stock: 407 },
-  { month: 'Jun', entradas: 240, salidas: 130, stock: 517 },
-  { month: 'Jul', entradas: 165, salidas: 148, stock: 534 },
-]
-
-const salesByCategory = [
-  { name: 'Refrigeración', value: 34 },
-  { name: 'Hélices', value: 28 },
-  { name: 'Combustible', value: 18 },
-  { name: 'Eléctrico', value: 12 },
-  { name: 'Accesorios', value: 8 },
-]
-
 const PIE_COLORS = ['#1565ff', '#00b4d8', '#0ea5e9', '#38bdf8', '#7dd3fc']
-
-const AUDIT_LOG = [
-  { id: 1, user: 'admin@bahianacho.com', action: 'Actualización de precio', detail: 'BN-002 Hélice Mercury: $265 → $285', date: '2026-07-20 14:32', type: 'edit' },
-  { id: 2, user: 'inventario@bahianacho.com', action: 'Entrada de stock', detail: 'BN-001 Impeller Yamaha: +20 unidades', date: '2026-07-20 12:15', type: 'add' },
-  { id: 3, user: 'admin@bahianacho.com', action: 'Importación Excel', detail: '48 productos actualizados desde inventario_julio.xlsx', date: '2026-07-20 10:00', type: 'import' },
-  { id: 4, user: 'ventas@bahianacho.com', action: 'Producto creado', detail: 'BN-009 Kit Filtro Combustible Honda BF creado', date: '2026-07-19 16:45', type: 'add' },
-  { id: 5, user: 'admin@bahianacho.com', action: 'Eliminación de categoría', detail: 'Categoría "Descontinuados" eliminada (0 productos)', date: '2026-07-19 11:20', type: 'delete' },
-  { id: 6, user: 'inventario@bahianacho.com', action: 'Ajuste de inventario', detail: 'BN-006 Kit Arranque Tohatsu: 3 → 0 (agotado)', date: '2026-07-18 17:00', type: 'edit' },
-  { id: 7, user: 'admin@bahianacho.com', action: 'Configuración actualizada', detail: 'Stock mínimo actualizado para 12 productos', date: '2026-07-18 09:30', type: 'settings' },
-]
-
-const NOTIFICATIONS_DATA = [
-  { id: 1, type: 'warning', title: 'Stock Bajo', message: 'BN-003 Carburador Yamaha 25-30 HP — 4 unidades (mínimo: 5)', time: 'Hace 5 min', read: false },
-  { id: 2, type: 'error', title: 'Producto Agotado', message: 'BN-006 Kit Arranque Eléctrico Tohatsu — Sin stock', time: 'Hace 2 horas', read: false },
-  { id: 3, type: 'success', title: 'Importación Exitosa', message: '48 productos actualizados desde inventario_julio.xlsx', time: 'Hace 4 horas', read: false },
-  { id: 4, type: 'info', title: 'Nueva Consulta WhatsApp', message: 'Cliente pregunta por hélices Mercury 90 HP paso 19', time: 'Hace 6 horas', read: true },
-  { id: 5, type: 'warning', title: 'Stock Bajo', message: 'BN-002 Hélice Mercury 13.5x17 — 8 unidades (mínimo: 3)', time: 'Ayer', read: true },
-  { id: 6, type: 'success', title: 'Respaldo Completado', message: 'Base de datos respaldada exitosamente (2.4 GB)', time: 'Ayer', read: true },
-]
 
 // ─────────────────────────────────────────────
 // SHARED UTILITIES
@@ -266,8 +244,9 @@ function Stars({ rating }: { rating: number }) {
 // ─────────────────────────────────────────────
 // PUBLIC NAVBAR
 // ─────────────────────────────────────────────
-function PublicNavbar({ onAdminClick, currentSection, onNav }: {
-  onAdminClick: () => void
+function PublicNavbar({ onAccountClick, accountLabel, currentSection, onNav }: {
+  onAccountClick: () => void
+  accountLabel: string
   currentSection: string
   onNav: (s: string) => void
 }) {
@@ -306,8 +285,8 @@ function PublicNavbar({ onAdminClick, currentSection, onNav }: {
             <Phone size={14} />
             <span>+57 300 123 4567</span>
           </a>
-          <button onClick={onAdminClick} className="bg-[#1565ff] hover:bg-[#1252d3] text-white text-sm font-semibold px-4 py-2 rounded-lg transition-all duration-200 glow-blue">
-            Panel Admin
+          <button onClick={onAccountClick} className="bg-[#1565ff] hover:bg-[#1252d3] text-white text-sm font-semibold px-4 py-2 rounded-lg transition-all duration-200 glow-blue">
+            {accountLabel}
           </button>
         </div>
 
@@ -325,8 +304,8 @@ function PublicNavbar({ onAdminClick, currentSection, onNav }: {
                 {l}
               </button>
             ))}
-            <button onClick={onAdminClick} className="mt-2 bg-[#1565ff] text-white py-2 rounded-lg text-sm font-semibold">
-              Panel Admin
+            <button onClick={onAccountClick} className="mt-2 bg-[#1565ff] text-white py-2 rounded-lg text-sm font-semibold">
+              {accountLabel}
             </button>
           </div>
         </div>
@@ -1005,26 +984,35 @@ function Footer({ onNav }: { onNav: (s: string) => void }) {
 // ─────────────────────────────────────────────
 // ADMIN LAYOUT
 // ─────────────────────────────────────────────
-const ADMIN_NAV: { icon: React.ComponentType<{ size?: number }>; label: string; view: AdminView; badge?: number }[] = [
-  { icon: LayoutDashboard, label: 'Dashboard', view: 'dashboard' },
-  { icon: Database, label: 'Inventario', view: 'inventory' },
-  { icon: Package, label: 'Productos', view: 'products' },
-  { icon: Tag, label: 'Categorías', view: 'categories' },
-  { icon: Building2, label: 'Marcas', view: 'brands' },
-  { icon: Truck, label: 'Proveedores', view: 'suppliers' },
-  { icon: Users, label: 'Clientes', view: 'clients' },
-  { icon: ShoppingCart, label: 'Órdenes', view: 'orders' },
-  { icon: FileSpreadsheet, label: 'Importar Excel', view: 'import' },
-  { icon: BarChart3, label: 'Reportes', view: 'reports' },
-  { icon: History, label: 'Auditoría', view: 'audit' },
-  { icon: Bell, label: 'Notificaciones', view: 'notifications', badge: 3 },
-  { icon: Settings, label: 'Configuración', view: 'settings' },
+const ADMIN_NAV: {
+  icon: React.ComponentType<{ size?: number; className?: string }>
+  label: string
+  view: AdminView
+  permission: string
+}[] = [
+  { icon: LayoutDashboard, label: 'Dashboard', view: 'dashboard', permission: 'dashboard.read' },
+  { icon: Database, label: 'Inventario', view: 'inventory', permission: 'inventory.read' },
+  { icon: Package, label: 'Productos', view: 'products', permission: 'products.read' },
+  { icon: Tag, label: 'Categorías', view: 'categories', permission: 'products.read' },
+  { icon: Building2, label: 'Marcas', view: 'brands', permission: 'products.read' },
+  { icon: Truck, label: 'Proveedores', view: 'suppliers', permission: 'suppliers.read' },
+  { icon: Users, label: 'Clientes', view: 'clients', permission: 'clients.read' },
+  { icon: UserRoundCog, label: 'Usuarios', view: 'users', permission: 'users.read' },
+  { icon: ShoppingCart, label: 'Órdenes', view: 'orders', permission: 'inquiries.read' },
+  { icon: FileSpreadsheet, label: 'Importar Excel', view: 'import', permission: 'imports.read' },
+  { icon: BarChart3, label: 'Reportes', view: 'reports', permission: 'reports.read' },
+  { icon: History, label: 'Auditoría', view: 'audit', permission: 'audit.read' },
+  { icon: Bell, label: 'Notificaciones', view: 'notifications', permission: 'inventory.read' },
+  { icon: Settings, label: 'Configuración', view: 'settings', permission: 'settings.read' },
 ]
 
-function AdminSidebar({ current, onNav, onPublic, collapsed, setCollapsed }: {
-  current: AdminView; onNav: (v: AdminView) => void; onPublic: () => void
+function AdminSidebar({ current, onNav, onPublic, onSignOut, permissions, collapsed, setCollapsed }: {
+  current: AdminView; onNav: (v: AdminView) => void; onPublic: () => void; onSignOut: () => void
+  permissions: string[]
   collapsed: boolean; setCollapsed: (v: boolean) => void
 }) {
+  const visibleNavigation = ADMIN_NAV.filter(item => permissions.includes(item.permission))
+
   return (
     <aside className={`fixed left-0 top-0 bottom-0 z-40 flex flex-col glass border-r border-[#1e3a5f] transition-all duration-300 ${collapsed ? 'w-16' : 'w-56'}`}>
       {/* Logo area */}
@@ -1037,7 +1025,7 @@ function AdminSidebar({ current, onNav, onPublic, collapsed, setCollapsed }: {
 
       {/* Nav items */}
       <nav className="flex-1 overflow-y-auto py-3 space-y-0.5 px-2">
-        {ADMIN_NAV.map(({ icon: Icon, label, view, badge }) => (
+        {visibleNavigation.map(({ icon: Icon, label, view }) => (
           <button
             key={view}
             onClick={() => onNav(view)}
@@ -1045,14 +1033,6 @@ function AdminSidebar({ current, onNav, onPublic, collapsed, setCollapsed }: {
           >
             <Icon size={17} className="flex-shrink-0" />
             {!collapsed && <span className="font-medium truncate">{label}</span>}
-            {badge && !collapsed && (
-              <span className="ml-auto bg-[#1565ff] text-white text-xs w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 badge-pulse">
-                {badge}
-              </span>
-            )}
-            {badge && collapsed && (
-              <span className="absolute top-1 right-1 bg-red-500 w-2 h-2 rounded-full badge-pulse" />
-            )}
           </button>
         ))}
       </nav>
@@ -1063,7 +1043,7 @@ function AdminSidebar({ current, onNav, onPublic, collapsed, setCollapsed }: {
           <Navigation size={17} className="flex-shrink-0" />
           {!collapsed && <span className="font-medium">Ver Sitio</span>}
         </button>
-        <button className="sidebar-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-red-400 hover:text-red-300 border-l-[3px] border-transparent transition-all">
+        <button onClick={onSignOut} className="sidebar-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-red-400 hover:text-red-300 border-l-[3px] border-transparent transition-all">
           <LogOut size={17} className="flex-shrink-0" />
           {!collapsed && <span className="font-medium">Cerrar Sesión</span>}
         </button>
@@ -1072,7 +1052,16 @@ function AdminSidebar({ current, onNav, onPublic, collapsed, setCollapsed }: {
   )
 }
 
-function AdminTopbar({ title, subtitle, notifications }: { title: string; subtitle?: string; notifications: number }) {
+function AdminTopbar({ title, subtitle, notifications, profile, onNotifications }: {
+  title: string
+  subtitle?: string
+  notifications: number
+  profile: UserProfile
+  onNotifications: () => void
+}) {
+  const fullName = `${profile.firstName} ${profile.lastName}`.trim() || profile.email
+  const initials = `${profile.firstName[0] ?? ''}${profile.lastName[0] ?? ''}`.toUpperCase() || profile.email[0].toUpperCase()
+
   return (
     <header className="h-16 flex items-center justify-between px-6 glass border-b border-[#1e3a5f]">
       <div>
@@ -1080,7 +1069,7 @@ function AdminTopbar({ title, subtitle, notifications }: { title: string; subtit
         {subtitle && <p className="text-[#64748b] text-xs">{subtitle}</p>}
       </div>
       <div className="flex items-center gap-4">
-        <button className="relative text-[#64748b] hover:text-white transition-colors">
+        <button onClick={onNotifications} aria-label="Abrir alertas de inventario" className="relative text-[#64748b] hover:text-white transition-colors">
           <Bell size={20} />
           {notifications > 0 && (
             <span className="absolute -top-1 -right-1 bg-[#1565ff] text-white text-xs w-4 h-4 rounded-full flex items-center justify-center badge-pulse">
@@ -1089,10 +1078,10 @@ function AdminTopbar({ title, subtitle, notifications }: { title: string; subtit
           )}
         </button>
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#1565ff] to-[#00b4d8] flex items-center justify-center text-white text-sm font-bold">A</div>
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#1565ff] to-[#00b4d8] flex items-center justify-center text-white text-sm font-bold">{initials}</div>
           <div className="hidden sm:block">
-            <div className="text-white text-xs font-medium">Admin</div>
-            <div className="text-[#64748b] text-xs">admin@bahianacho.com</div>
+            <div className="text-white text-xs font-medium max-w-44 truncate">{fullName}</div>
+            <div className="text-[#64748b] text-xs">{profile.role.name}</div>
           </div>
         </div>
       </div>
@@ -1100,18 +1089,134 @@ function AdminTopbar({ title, subtitle, notifications }: { title: string; subtit
   )
 }
 
+function formatDate(value: string, includeTime = false) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'Fecha no disponible'
+  return new Intl.DateTimeFormat('es-CO', {
+    dateStyle: 'medium',
+    ...(includeTime ? { timeStyle: 'short' as const } : {}),
+  }).format(date)
+}
+
+function formatCurrency(value: number, currency = 'COP') {
+  try {
+    return new Intl.NumberFormat('es-CO', {
+      style: 'currency',
+      currency,
+      maximumFractionDigits: 2,
+    }).format(value)
+  } catch {
+    return `${currency} ${new Intl.NumberFormat('es-CO').format(value)}`
+  }
+}
+
+function downloadCsv(fileName: string, rows: Array<Array<string | number>>) {
+  const escapeCell = (value: string | number) => `"${String(value).replace(/"/g, '""')}"`
+  const csv = `\uFEFF${rows.map(row => row.map(escapeCell).join(',')).join('\n')}`
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = fileName
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+function AdminLoading({ message, compact = false }: { message: string; compact?: boolean }) {
+  return (
+    <div className={`flex items-center justify-center gap-3 text-[#93c5fd] ${compact ? 'py-8' : 'min-h-64'}`} role="status">
+      <RefreshCw size={18} className="animate-spin text-[#1565ff]" />
+      <span className="text-sm">{message}</span>
+    </div>
+  )
+}
+
+function AdminError({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  return (
+    <div role="alert" className="glass border border-red-800/70 rounded-xl px-4 py-3 flex items-center gap-3 text-sm text-red-300">
+      <AlertTriangle size={17} className="flex-shrink-0" />
+      <span className="flex-1">{message}</span>
+      {onRetry && <button onClick={onRetry} className="text-white hover:text-red-200 font-medium">Reintentar</button>}
+    </div>
+  )
+}
+
+function AdminEmpty({ message, compact = false }: { message: string; compact?: boolean }) {
+  return (
+    <div className={`text-center text-[#64748b] ${compact ? 'py-5' : 'py-12'}`}>
+      <Database size={compact ? 22 : 34} className="mx-auto mb-2 opacity-40" />
+      <p className="text-sm">{message}</p>
+    </div>
+  )
+}
+
+function AuditActionBadge({ action }: { action: AuditEntry['action'] }) {
+  const styles = action === 'insert'
+    ? 'bg-green-900/40 text-green-400 border-green-800'
+    : action === 'delete'
+      ? 'bg-red-900/40 text-red-400 border-red-800'
+      : 'bg-yellow-900/40 text-yellow-400 border-yellow-800'
+  const label = action === 'insert' ? 'Creación' : action === 'delete' ? 'Eliminación' : 'Actualización'
+  return <span className={`inline-flex text-xs px-2 py-0.5 rounded-full border ${styles}`}>{label}</span>
+}
+
+function ImportStatusBadge({ status }: { status: string }) {
+  const success = status === 'completed'
+  const failed = status === 'failed' || status === 'cancelled'
+  const styles = success
+    ? 'bg-green-900/40 text-green-400 border-green-800'
+    : failed
+      ? 'bg-red-900/40 text-red-400 border-red-800'
+      : 'bg-blue-900/40 text-blue-400 border-blue-800'
+  const labels: Record<string, string> = {
+    pending: 'Pendiente', validating: 'Validando', processing: 'Procesando',
+    completed: 'Completada', failed: 'Fallida', cancelled: 'Cancelada',
+  }
+  return <span className={`text-xs px-2 py-0.5 rounded-full border ${styles}`}>{labels[status] ?? status}</span>
+}
+
 // ─────────────────────────────────────────────
 // ADMIN DASHBOARD
 // ─────────────────────────────────────────────
-function AdminDashboard() {
-  const stats = [
-    { label: 'Productos Registrados', value: '2,148', change: '+32 este mes', icon: Package, trend: 'up', color: '#1565ff' },
-    { label: 'Stock Disponible', value: '8,432', change: '+156 esta semana', icon: Database, trend: 'up', color: '#00b4d8' },
-    { label: 'Productos Agotados', value: '14', change: '+3 hoy', icon: AlertTriangle, trend: 'down', color: '#ef4444' },
-    { label: 'Stock Bajo', value: '23', change: '−5 vs ayer', icon: TrendingDown, trend: 'up', color: '#f59e0b' },
-    { label: 'Consultas Hoy', value: '47', change: '+12 vs ayer', icon: MessageCircle, trend: 'up', color: '#10b981' },
-    { label: 'Marcas Activas', value: '8', change: 'Sin cambios', icon: Award, trend: 'neutral', color: '#8b5cf6' },
-  ]
+function AdminDashboard({ onAudit }: { onAudit: () => void }) {
+  const [snapshot, setSnapshot] = useState<DashboardSnapshot | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const loadDashboard = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      setSnapshot(await getDashboardSnapshot())
+    } catch {
+      setError('No fue posible cargar los indicadores desde Supabase.')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadDashboard()
+  }, [loadDashboard])
+
+  const inventoryChartData = useMemo(() => (snapshot?.inventoryActivity ?? []).map(row => ({
+    month: new Intl.DateTimeFormat('es-CO', { month: 'short' }).format(new Date(`${row.month}-01T12:00:00`)),
+    entradas: row.entries,
+    salidas: row.exits,
+    neto: row.net,
+  })), [snapshot])
+  const salesByCategory = snapshot?.categoryDistribution ?? []
+
+  const stats = snapshot ? [
+    { label: 'Productos Registrados', value: snapshot.stats.products, change: 'Datos actuales', icon: Package, trend: 'neutral', color: '#1565ff' },
+    { label: 'Stock Disponible', value: snapshot.stats.totalStock, change: 'Todas las bodegas', icon: Database, trend: 'neutral', color: '#00b4d8' },
+    { label: 'Productos Agotados', value: snapshot.stats.outOfStock, change: 'Requieren atención', icon: AlertTriangle, trend: 'down', color: '#ef4444' },
+    { label: 'Stock Bajo', value: snapshot.stats.lowStock, change: 'Bajo el mínimo', icon: TrendingDown, trend: 'down', color: '#f59e0b' },
+    { label: 'Consultas Hoy', value: snapshot.stats.inquiriesToday, change: 'Desde medianoche', icon: MessageCircle, trend: 'neutral', color: '#10b981' },
+    { label: 'Marcas Activas', value: snapshot.stats.activeBrands, change: 'Catálogo disponible', icon: Award, trend: 'neutral', color: '#8b5cf6' },
+  ] : []
+
+  if (loading) return <AdminLoading message="Cargando indicadores reales…" />
+  if (error || !snapshot) return <AdminError message={error ?? 'No hay datos disponibles.'} onRetry={loadDashboard} />
 
   return (
     <div className="space-y-6">
@@ -1124,7 +1229,7 @@ function AdminDashboard() {
             </div>
             <div className="flex-1 min-w-0">
               <div className="text-[#64748b] text-xs mb-1">{s.label}</div>
-              <div className="font-display text-2xl font-bold text-white mb-1">{s.value}</div>
+              <div className="font-display text-2xl font-bold text-white mb-1">{new Intl.NumberFormat('es-CO').format(s.value)}</div>
               <div className={`text-xs flex items-center gap-1 ${s.trend === 'up' ? 'text-green-400' : s.trend === 'down' ? 'text-red-400' : 'text-[#64748b]'}`}>
                 {s.trend === 'up' ? <ArrowUpRight size={12} /> : s.trend === 'down' ? <ArrowDownRight size={12} /> : null}
                 {s.change}
@@ -1137,7 +1242,7 @@ function AdminDashboard() {
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
         {/* Area chart */}
         <div className="xl:col-span-2 glass border border-[#1e3a5f] rounded-xl p-5">
-          <h3 className="font-display font-bold text-white mb-4">Movimiento de Inventario — 2026</h3>
+          <h3 className="font-display font-bold text-white mb-4">Movimiento de Inventario — últimos 7 meses</h3>
           <ResponsiveContainer width="100%" height={220}>
             <AreaChart data={inventoryChartData}>
               <defs>
@@ -1163,17 +1268,19 @@ function AdminDashboard() {
 
         {/* Pie chart */}
         <div className="glass border border-[#1e3a5f] rounded-xl p-5">
-          <h3 className="font-display font-bold text-white mb-4">Ventas por Categoría</h3>
-          <ResponsiveContainer width="100%" height={180}>
-            <PieChart>
-              <Pie data={salesByCategory} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value">
-                {salesByCategory.map((_, i) => (
-                  <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip contentStyle={{ background: '#0d1f3c', border: '1px solid #1e3a5f', borderRadius: '8px', color: '#e8f0fe', fontSize: 12 }} />
-            </PieChart>
-          </ResponsiveContainer>
+          <h3 className="font-display font-bold text-white mb-4">Productos por Categoría</h3>
+          {salesByCategory.length > 0 ? (
+            <ResponsiveContainer width="100%" height={180}>
+              <PieChart>
+                <Pie data={salesByCategory} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value">
+                  {salesByCategory.map((_, i) => (
+                    <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip contentStyle={{ background: '#0d1f3c', border: '1px solid #1e3a5f', borderRadius: '8px', color: '#e8f0fe', fontSize: 12 }} />
+              </PieChart>
+            </ResponsiveContainer>
+          ) : <AdminEmpty message="Aún no hay productos registrados." compact />}
           <div className="space-y-1.5">
             {salesByCategory.map((s, i) => (
               <div key={s.name} className="flex items-center justify-between text-xs">
@@ -1181,7 +1288,7 @@ function AdminDashboard() {
                   <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: PIE_COLORS[i] }} />
                   <span className="text-[#93c5fd]">{s.name}</span>
                 </div>
-                <span className="text-white font-medium font-mono">{s.value}%</span>
+                <span className="text-white font-medium font-mono">{s.value}</span>
               </div>
             ))}
           </div>
@@ -1192,21 +1299,22 @@ function AdminDashboard() {
       <div className="glass border border-[#1e3a5f] rounded-xl p-5">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-display font-bold text-white">Actividad Reciente</h3>
-          <button className="text-[#1565ff] hover:text-[#00b4d8] text-xs transition-colors">Ver todo</button>
+          <button onClick={onAudit} className="text-[#1565ff] hover:text-[#00b4d8] text-xs transition-colors">Ver todo</button>
         </div>
         <div className="space-y-3">
-          {AUDIT_LOG.slice(0, 4).map(log => (
+          {snapshot.recentActivity.map(log => (
             <div key={log.id} className="flex items-start gap-3 text-sm">
-              <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${log.type === 'add' ? 'bg-green-900/50 text-green-400' : log.type === 'delete' ? 'bg-red-900/50 text-red-400' : log.type === 'import' ? 'bg-blue-900/50 text-blue-400' : 'bg-yellow-900/50 text-yellow-400'}`}>
-                {log.type === 'add' ? <Plus size={12} /> : log.type === 'delete' ? <Trash2 size={12} /> : log.type === 'import' ? <Upload size={12} /> : <Edit2 size={12} />}
+              <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${log.action === 'insert' ? 'bg-green-900/50 text-green-400' : log.action === 'delete' ? 'bg-red-900/50 text-red-400' : 'bg-yellow-900/50 text-yellow-400'}`}>
+                {log.action === 'insert' ? <Plus size={12} /> : log.action === 'delete' ? <Trash2 size={12} /> : <Edit2 size={12} />}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-white font-medium">{log.action}</div>
-                <div className="text-[#64748b] text-xs truncate">{log.detail}</div>
+                <div className="text-white font-medium">{log.action === 'insert' ? 'Registro creado' : log.action === 'delete' ? 'Registro eliminado' : 'Registro actualizado'}</div>
+                <div className="text-[#64748b] text-xs truncate">{log.table_name} · {log.user_email ?? 'Sistema'}</div>
               </div>
-              <div className="text-[#64748b] text-xs flex-shrink-0">{log.date.split(' ')[1]}</div>
+              <div className="text-[#64748b] text-xs flex-shrink-0">{formatDate(log.created_at, true)}</div>
             </div>
           ))}
+          {snapshot.recentActivity.length === 0 && <AdminEmpty message="No hay actividad reciente visible." compact />}
         </div>
       </div>
     </div>
@@ -1216,36 +1324,82 @@ function AdminDashboard() {
 // ─────────────────────────────────────────────
 // ADMIN INVENTORY
 // ─────────────────────────────────────────────
-function AdminInventory() {
+function AdminInventory({ onAdd }: { onAdd: () => void }) {
   const [search, setSearch] = useState('')
-  const [sortKey, setSortKey] = useState<keyof Product>('code')
+  const [sortKey, setSortKey] = useState<InventorySort>('internal_code')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [page, setPage] = useState(0)
-  const perPage = 5
+  const [rows, setRows] = useState<InventoryProduct[]>([])
+  const [totalCount, setTotalCount] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [exporting, setExporting] = useState(false)
+  const perPage = 10
+  const totalPages = Math.max(1, Math.ceil(totalCount / perPage))
 
-  const filtered = PRODUCTS.filter(p => {
-    const q = search.toLowerCase()
-    return !q || p.name.toLowerCase().includes(q) || p.code.toLowerCase().includes(q) || p.brand.toLowerCase().includes(q) || p.category.toLowerCase().includes(q)
-  }).sort((a, b) => {
-    const av = a[sortKey] as string | number
-    const bv = b[sortKey] as string | number
-    const cmp = av < bv ? -1 : av > bv ? 1 : 0
-    return sortDir === 'asc' ? cmp : -cmp
-  })
+  useEffect(() => {
+    let active = true
+    const timer = window.setTimeout(() => {
+      setLoading(true)
+      setError(null)
+      void getInventoryPage({ search, sort: sortKey, ascending: sortDir === 'asc', page, pageSize: perPage })
+        .then(result => {
+          if (!active) return
+          setRows(result.rows)
+          setTotalCount(result.count)
+        })
+        .catch(() => {
+          if (active) setError('No fue posible cargar el inventario desde Supabase.')
+        })
+        .finally(() => {
+          if (active) setLoading(false)
+        })
+    }, 250)
 
-  const paginated = filtered.slice(page * perPage, page * perPage + perPage)
-  const totalPages = Math.ceil(filtered.length / perPage)
+    return () => {
+      active = false
+      window.clearTimeout(timer)
+    }
+  }, [page, search, sortDir, sortKey])
 
-  const handleSort = (k: keyof Product) => {
+  const handleSort = (k: InventorySort) => {
     if (k === sortKey) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    else { setSortKey(k); setSortDir('asc') }
+    else { setSortKey(k); setSortDir('asc'); setPage(0) }
   }
 
-  const SortIcon = ({ k }: { k: keyof Product }) => (
+  const SortIcon = ({ k }: { k: InventorySort }) => (
     sortKey === k
       ? sortDir === 'asc' ? <ChevronUp size={13} /> : <ChevronDown size={13} />
       : <div className="w-3" />
   )
+
+  const handleExport = async () => {
+    setExporting(true)
+    setError(null)
+    try {
+      const products = await getInventoryExport()
+      downloadCsv('inventario-bahia-nacho.csv', [
+        ['Código', 'OEM', 'Producto', 'Marca', 'Categoría', 'Stock', 'Disponible', 'Mínimo', 'Precio', 'Moneda', 'Estado'],
+        ...products.map(product => [
+          product.internalCode,
+          product.oemCode ?? '',
+          product.name,
+          product.brandName,
+          product.categoryName,
+          product.stock,
+          product.availableStock,
+          product.minStock,
+          product.salePrice,
+          product.currencyCode,
+          product.status,
+        ]),
+      ])
+    } catch {
+      setError('No fue posible exportar el inventario.')
+    } finally {
+      setExporting(false)
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -1257,25 +1411,27 @@ function AdminInventory() {
             className="w-full glass border border-[#1e3a5f] focus:border-[#1565ff] bg-transparent pl-9 pr-3 py-2 text-white placeholder-[#64748b] rounded-lg text-sm outline-none" />
         </div>
         <div className="flex gap-2">
-          <button className="flex items-center gap-2 bg-[#1565ff] hover:bg-[#1252d3] text-white text-sm font-semibold px-4 py-2 rounded-lg transition-all glow-blue">
+          <button onClick={onAdd} className="flex items-center gap-2 bg-[#1565ff] hover:bg-[#1252d3] text-white text-sm font-semibold px-4 py-2 rounded-lg transition-all glow-blue">
             <Plus size={15} /> Agregar
           </button>
-          <button className="flex items-center gap-2 glass border border-[#1e3a5f] hover:border-[#1565ff] text-[#93c5fd] text-sm px-3 py-2 rounded-lg transition-all">
-            <Download size={15} /> Exportar
+          <button onClick={handleExport} disabled={exporting} className="flex items-center gap-2 glass border border-[#1e3a5f] hover:border-[#1565ff] disabled:opacity-50 text-[#93c5fd] text-sm px-3 py-2 rounded-lg transition-all">
+            {exporting ? <RefreshCw size={15} className="animate-spin" /> : <Download size={15} />} Exportar
           </button>
         </div>
       </div>
+
+      {error && <AdminError message={error} />}
 
       <div className="glass border border-[#1e3a5f] rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-[#1e3a5f] bg-[#0a1628]">
-                {[['code', 'Código'], ['name', 'Producto'], ['brand', 'Marca'], ['category', 'Categoría'], ['stock', 'Stock'], ['price', 'Precio'], ['', 'Estado'], ['', 'Acciones']].map(([k, l]) => (
+                {([['internal_code', 'Código'], ['name', 'Producto'], ['brand_name', 'Marca'], ['category_name', 'Categoría'], ['stock', 'Stock'], ['sale_price', 'Precio'], ['', 'Estado']] as Array<[InventorySort | '', string]>).map(([k, l]) => (
                   <th key={l} className="px-4 py-3 text-left text-xs text-[#64748b] font-medium">
                     {k ? (
-                      <button className="flex items-center gap-1 hover:text-white transition-colors" onClick={() => handleSort(k as keyof Product)}>
-                        {l} <SortIcon k={k as keyof Product} />
+                      <button className="flex items-center gap-1 hover:text-white transition-colors" onClick={() => handleSort(k)}>
+                        {l} <SortIcon k={k} />
                       </button>
                     ) : l}
                   </th>
@@ -1283,57 +1439,58 @@ function AdminInventory() {
               </tr>
             </thead>
             <tbody>
-              {paginated.map(p => (
+              {rows.map(p => (
                 <tr key={p.id} className="table-row-hover border-b border-[#1e3a5f]/50 transition-colors">
                   <td className="px-4 py-3">
-                    <div className="font-mono text-xs text-[#00b4d8]">{p.code}</div>
+                    <div className="font-mono text-xs text-[#00b4d8]">{p.internalCode}</div>
                     <div className="text-[#64748b] text-xs">{p.oemCode}</div>
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
-                      <img src={p.image} alt={p.name} className="w-9 h-9 rounded-lg object-cover bg-[#0a1628] flex-shrink-0"
-                        onError={e => { (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=40&h=40&fit=crop' }} />
+                      {p.primaryImageUrl ? (
+                        <img src={p.primaryImageUrl} alt="" className="w-9 h-9 rounded-lg object-cover bg-[#0a1628] flex-shrink-0" />
+                      ) : (
+                        <div className="w-9 h-9 rounded-lg bg-[#0a1628] flex items-center justify-center flex-shrink-0"><Package size={14} className="text-[#64748b]" /></div>
+                      )}
                       <div className="min-w-0">
                         <div className="text-white text-xs font-medium truncate max-w-[200px]">{p.name}</div>
-                        <div className="text-[#64748b] text-xs truncate max-w-[200px]">{p.compatibility[0]}</div>
+                        <div className="text-[#64748b] text-xs truncate max-w-[200px]">Disponible: {p.availableStock}</div>
                       </div>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-[#93c5fd] text-xs">{p.brand}</td>
-                  <td className="px-4 py-3 text-[#64748b] text-xs">{p.category}</td>
+                  <td className="px-4 py-3 text-[#93c5fd] text-xs">{p.brandName}</td>
+                  <td className="px-4 py-3 text-[#64748b] text-xs">{p.categoryName}</td>
                   <td className="px-4 py-3">
                     <div className="font-mono text-white font-medium text-xs">{p.stock}</div>
                     <div className="text-[#64748b] text-xs">mín: {p.minStock}</div>
                   </td>
-                  <td className="px-4 py-3 font-display font-bold text-white text-sm">{formatPrice(p.price)}</td>
+                  <td className="px-4 py-3 font-display font-bold text-white text-sm">{formatCurrency(p.salePrice, p.currencyCode)}</td>
                   <td className="px-4 py-3"><StockBadge stock={p.stock} min={p.minStock} /></td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1">
-                      <button className="p-1.5 rounded-lg text-[#64748b] hover:text-[#00b4d8] hover:bg-[#00b4d8]/10 transition-all"><Eye size={13} /></button>
-                      <button className="p-1.5 rounded-lg text-[#64748b] hover:text-[#1565ff] hover:bg-[#1565ff]/10 transition-all"><Edit2 size={13} /></button>
-                      <button className="p-1.5 rounded-lg text-[#64748b] hover:text-[#93c5fd] hover:bg-white/5 transition-all"><Copy size={13} /></button>
-                      <button className="p-1.5 rounded-lg text-[#64748b] hover:text-red-400 hover:bg-red-900/20 transition-all"><Trash2 size={13} /></button>
-                    </div>
-                  </td>
                 </tr>
               ))}
+              {!loading && rows.length === 0 && (
+                <tr><td colSpan={7}><AdminEmpty message="No hay productos que coincidan con la búsqueda." /></td></tr>
+              )}
+              {loading && (
+                <tr><td colSpan={7}><AdminLoading message="Consultando inventario…" compact /></td></tr>
+              )}
             </tbody>
           </table>
         </div>
         <div className="flex items-center justify-between px-4 py-3 border-t border-[#1e3a5f] text-xs text-[#64748b]">
-          <span>Mostrando {paginated.length} de {filtered.length} resultados</span>
+          <span>Mostrando {rows.length} de {totalCount} resultados</span>
           <div className="flex items-center gap-2">
             <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
               className="p-1.5 rounded-lg hover:bg-white/5 disabled:opacity-30 transition-all">
               <ChevronLeft size={14} />
             </button>
-            {Array.from({ length: totalPages }, (_, i) => (
+            {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => (
               <button key={i} onClick={() => setPage(i)}
                 className={`w-6 h-6 rounded-lg text-xs transition-all ${page === i ? 'bg-[#1565ff] text-white' : 'hover:bg-white/5 text-[#64748b]'}`}>
                 {i + 1}
               </button>
             ))}
-            <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}
+            <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1 || totalCount === 0}
               className="p-1.5 rounded-lg hover:bg-white/5 disabled:opacity-30 transition-all">
               <ChevronRight size={14} />
             </button>
@@ -1348,254 +1505,271 @@ function AdminInventory() {
 // ADMIN IMPORT
 // ─────────────────────────────────────────────
 function AdminImport() {
-  const [dragging, setDragging] = useState(false)
-  const [file, setFile] = useState<string | null>(null)
-  const [preview, setPreview] = useState(false)
-  const [importing, setImporting] = useState(false)
-  const [done, setDone] = useState(false)
-  const fileRef = useRef<HTMLInputElement>(null)
+  const [history, setHistory] = useState<ImportHistoryEntry[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    setDragging(false)
-    setFile('inventario_julio_2026.xlsx')
-    setPreview(false)
-    setDone(false)
-  }
+  const loadHistory = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      setHistory(await getImportHistory())
+    } catch {
+      setError('No fue posible consultar el historial de importaciones.')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
-  const handleImport = () => {
-    setImporting(true)
-    setTimeout(() => { setImporting(false); setDone(true) }, 2000)
-  }
-
-  const previewRows = [
-    { code: 'BN-001', name: 'Impeller Kit Yamaha 40-60 HP', stock: 35, price: 48.50, status: 'Actualizar' },
-    { code: 'BN-009', name: 'Filtro Combustible Honda BF40', stock: 18, price: 22.00, status: 'Crear' },
-    { code: 'BN-006', name: 'Kit Arranque Tohatsu MFS', stock: 0, price: 218.00, status: 'Actualizar' },
-    { code: 'BN-010', name: 'Cable Dirección 10ft Mercury', stock: 7, price: 65.00, status: 'Crear' },
-    { code: 'BN-003', name: 'Carburador Yamaha 25-30 HP', stock: 6, price: 132.00, status: 'Actualizar' },
-  ]
-
-  const historyRows = [
-    { file: 'inventario_junio_2026.xlsx', user: 'admin@bahianacho.com', date: '2026-06-30 09:15', created: 12, updated: 54, errors: 2 },
-    { file: 'importacion_mayo.xlsx', user: 'inventario@bahianacho.com', date: '2026-05-31 11:00', created: 8, updated: 41, errors: 0 },
-    { file: 'stock_abril.xlsx', user: 'admin@bahianacho.com', date: '2026-04-30 14:20', created: 5, updated: 38, errors: 1 },
-  ]
+  useEffect(() => {
+    void loadHistory()
+  }, [loadHistory])
 
   return (
     <div className="space-y-6">
-      {/* Drop zone */}
       <div className="glass border border-[#1e3a5f] rounded-xl p-6">
-        <h3 className="font-display font-bold text-white mb-4 flex items-center gap-2"><Upload size={18} className="text-[#00b4d8]" /> Importar Archivo Excel</h3>
-        <div
-          onDragOver={e => { e.preventDefault(); setDragging(true) }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={handleDrop}
-          onClick={() => fileRef.current?.click()}
-          className={`border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-all duration-200 ${dragging ? 'border-[#1565ff] bg-[#1565ff]/10' : 'border-[#1e3a5f] hover:border-[#1565ff]/50 hover:bg-[#1565ff]/5'}`}
-        >
-          <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={e => { if (e.target.files?.[0]) { setFile(e.target.files[0].name); setPreview(false); setDone(false) } }} />
-          <FileSpreadsheet size={40} className={`mx-auto mb-3 ${dragging ? 'text-[#1565ff]' : 'text-[#64748b]'}`} />
-          {file ? (
-            <>
-              <p className="text-white font-semibold">{file}</p>
-              <p className="text-[#00b4d8] text-sm mt-1">Archivo listo para importar</p>
-            </>
-          ) : (
-            <>
-              <p className="text-[#93c5fd] font-medium">Arrastra tu archivo Excel aquí</p>
-              <p className="text-[#64748b] text-sm mt-1">o haz clic para seleccionar (.xlsx, .xls, .csv)</p>
-              <p className="text-[#64748b] text-xs mt-3">Descarga la plantilla para asegurar el formato correcto</p>
-            </>
-          )}
+        <div className="flex items-start gap-4">
+          <div className="w-11 h-11 rounded-xl bg-[#1565ff]/15 border border-[#1565ff]/30 flex items-center justify-center flex-shrink-0">
+            <FileSpreadsheet size={20} className="text-[#00b4d8]" />
+          </div>
+          <div className="flex-1">
+            <h3 className="font-display font-bold text-white">Importación Excel conectada a Supabase</h3>
+            <p className="text-[#93c5fd] text-sm mt-1 leading-relaxed">
+              El historial mostrado abajo proviene de la base de datos. El procesador seguro de archivos se habilitará
+              mediante una función de servidor; no se simularán importaciones ni resultados desde el navegador.
+            </p>
+          </div>
+          <button onClick={loadHistory} disabled={loading} className="p-2 rounded-lg glass text-[#93c5fd] hover:text-white disabled:opacity-50" aria-label="Actualizar historial">
+            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+          </button>
         </div>
-
-        {file && !done && (
-          <div className="flex gap-3 mt-4">
-            <button onClick={() => setPreview(true)} className="flex items-center gap-2 glass border border-[#1e3a5f] hover:border-[#1565ff] text-[#93c5fd] hover:text-white text-sm px-4 py-2 rounded-lg transition-all">
-              <Eye size={14} /> Vista Previa
-            </button>
-            <button onClick={handleImport} disabled={importing}
-              className="flex items-center gap-2 bg-[#1565ff] hover:bg-[#1252d3] disabled:opacity-60 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-all glow-blue">
-              {importing ? <RefreshCw size={14} className="animate-spin" /> : <Upload size={14} />}
-              {importing ? 'Importando…' : 'Importar Datos'}
-            </button>
-            <button onClick={() => { setFile(null); setPreview(false) }} className="text-[#64748b] hover:text-red-400 text-sm px-3 transition-colors">
-              Cancelar
-            </button>
-          </div>
-        )}
-
-        {done && (
-          <div className="mt-4 flex items-center gap-3 bg-green-900/20 border border-green-800 rounded-xl px-4 py-3">
-            <CheckCircle size={18} className="text-green-400" />
-            <div>
-              <div className="text-green-400 font-semibold text-sm">Importación completada exitosamente</div>
-              <div className="text-[#64748b] text-xs">3 productos creados · 45 actualizados · 0 errores</div>
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* Preview table */}
-      {preview && (
-        <div className="glass border border-[#1e3a5f] rounded-xl overflow-hidden">
-          <div className="px-5 py-3 border-b border-[#1e3a5f] flex items-center gap-2">
-            <Eye size={15} className="text-[#00b4d8]" />
-            <h3 className="font-semibold text-white text-sm">Vista Previa — 5 de 48 registros</h3>
-          </div>
+      {error && <AdminError message={error} onRetry={loadHistory} />}
+
+      <div className="glass border border-[#1e3a5f] rounded-xl overflow-hidden">
+        <div className="px-5 py-3 border-b border-[#1e3a5f]">
+          <h3 className="font-display font-bold text-white text-sm flex items-center gap-2">
+            <History size={15} className="text-[#00b4d8]" /> Historial real de importaciones
+          </h3>
+        </div>
+        {loading ? <AdminLoading message="Consultando importaciones…" compact /> : history.length === 0 ? (
+          <AdminEmpty message="Todavía no se han procesado importaciones." />
+        ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-[#0a1628] border-b border-[#1e3a5f]">
-                  {['Código', 'Nombre', 'Stock', 'Precio', 'Acción'].map(h => (
-                    <th key={h} className="px-4 py-2.5 text-left text-xs text-[#64748b] font-medium">{h}</th>
+                  {['Archivo', 'Usuario', 'Estado', 'Fecha', 'Filas', 'Creados', 'Actualizados', 'Errores'].map(header => (
+                    <th key={header} className="px-4 py-2.5 text-left text-xs text-[#64748b] font-medium">{header}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {previewRows.map(r => (
-                  <tr key={r.code} className="border-b border-[#1e3a5f]/50 table-row-hover transition-colors">
-                    <td className="px-4 py-2.5 font-mono text-xs text-[#00b4d8]">{r.code}</td>
-                    <td className="px-4 py-2.5 text-white text-xs">{r.name}</td>
-                    <td className="px-4 py-2.5 font-mono text-xs text-white">{r.stock}</td>
-                    <td className="px-4 py-2.5 text-white text-xs">{formatPrice(r.price)}</td>
-                    <td className="px-4 py-2.5">
-                      <span className={`text-xs px-2 py-0.5 rounded-full border ${r.status === 'Crear' ? 'bg-green-900/40 text-green-400 border-green-800' : 'bg-blue-900/40 text-blue-400 border-blue-800'}`}>
-                        {r.status}
-                      </span>
-                    </td>
+                {history.map(entry => (
+                  <tr key={entry.id} className="border-b border-[#1e3a5f]/50 table-row-hover transition-colors">
+                    <td className="px-4 py-3 text-white text-xs">{entry.fileName}</td>
+                    <td className="px-4 py-3 text-[#93c5fd] text-xs">{entry.userEmail ?? 'Sistema'}</td>
+                    <td className="px-4 py-3"><ImportStatusBadge status={entry.status} /></td>
+                    <td className="px-4 py-3 font-mono text-xs text-[#64748b]">{formatDate(entry.createdAt)}</td>
+                    <td className="px-4 py-3 text-white font-mono text-xs">{entry.totalRows}</td>
+                    <td className="px-4 py-3 text-green-400 font-mono text-xs">{entry.createdCount}</td>
+                    <td className="px-4 py-3 text-blue-400 font-mono text-xs">{entry.updatedCount}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-red-400">{entry.errorCount}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </div>
-      )}
-
-      {/* Import history */}
-      <div className="glass border border-[#1e3a5f] rounded-xl overflow-hidden">
-        <div className="px-5 py-3 border-b border-[#1e3a5f]">
-          <h3 className="font-display font-bold text-white text-sm flex items-center gap-2"><History size={15} className="text-[#00b4d8]" /> Historial de Importaciones</h3>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-[#0a1628] border-b border-[#1e3a5f]">
-                {['Archivo', 'Usuario', 'Fecha', 'Creados', 'Actualizados', 'Errores'].map(h => (
-                  <th key={h} className="px-4 py-2.5 text-left text-xs text-[#64748b] font-medium">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {historyRows.map(r => (
-                <tr key={r.file} className="border-b border-[#1e3a5f]/50 table-row-hover transition-colors">
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <FileSpreadsheet size={14} className="text-green-400" />
-                      <span className="text-white text-xs">{r.file}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-[#93c5fd] text-xs">{r.user}</td>
-                  <td className="px-4 py-3 font-mono text-xs text-[#64748b]">{r.date}</td>
-                  <td className="px-4 py-3 text-green-400 font-mono text-xs">+{r.created}</td>
-                  <td className="px-4 py-3 text-blue-400 font-mono text-xs">~{r.updated}</td>
-                  <td className="px-4 py-3">
-                    <span className={`font-mono text-xs ${r.errors > 0 ? 'text-red-400' : 'text-[#64748b]'}`}>{r.errors}</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        )}
       </div>
     </div>
   )
 }
-
-// ─────────────────────────────────────────────
-// ADMIN AUDIT
-// ─────────────────────────────────────────────
 function AdminAudit() {
+  const [search, setSearch] = useState('')
+  const [rows, setRows] = useState<AuditEntry[]>([])
+  const [totalCount, setTotalCount] = useState(0)
+  const [page, setPage] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const pageSize = 20
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
+
+  useEffect(() => {
+    let active = true
+    const timer = window.setTimeout(() => {
+      setLoading(true)
+      setError(null)
+      void getAuditPage({ search, page, pageSize })
+        .then(result => {
+          if (!active) return
+          setRows(result.rows)
+          setTotalCount(result.count)
+        })
+        .catch(() => {
+          if (active) setError('No fue posible consultar la auditoría.')
+        })
+        .finally(() => {
+          if (active) setLoading(false)
+        })
+    }, 250)
+
+    return () => {
+      active = false
+      window.clearTimeout(timer)
+    }
+  }, [page, search])
+
+  const exportCurrentPage = () => {
+    downloadCsv('auditoria-bahia-nacho.csv', [
+      ['ID', 'Acción', 'Tabla', 'Registro', 'Campos', 'Usuario', 'IP', 'Fecha'],
+      ...rows.map(row => [
+        row.id,
+        row.action,
+        row.tableName,
+        row.recordId ?? '',
+        row.changedFields.join(', '),
+        row.userEmail ?? 'Sistema',
+        row.ipAddress ?? '',
+        row.createdAt,
+      ]),
+    ])
+  }
+
   return (
     <div className="space-y-4">
-      <div className="flex gap-3">
+      <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1 max-w-sm">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#64748b]" />
-          <input type="text" placeholder="Filtrar por usuario o acción…"
-            className="w-full glass border border-[#1e3a5f] focus:border-[#1565ff] bg-transparent pl-9 pr-3 py-2 text-white placeholder-[#64748b] rounded-lg text-sm outline-none" />
+          <input
+            type="search"
+            value={search}
+            onChange={event => { setSearch(event.target.value); setPage(0) }}
+            maxLength={80}
+            placeholder="Filtrar por tabla, acción o registro…"
+            className="w-full glass border border-[#1e3a5f] focus:border-[#1565ff] bg-transparent pl-9 pr-3 py-2 text-white placeholder-[#64748b] rounded-lg text-sm outline-none"
+          />
         </div>
-        <button className="flex items-center gap-2 glass border border-[#1e3a5f] hover:border-[#1565ff] text-[#93c5fd] text-sm px-3 py-2 rounded-lg transition-all">
-          <Download size={14} /> Exportar
+        <button onClick={exportCurrentPage} disabled={rows.length === 0} className="flex items-center gap-2 glass border border-[#1e3a5f] hover:border-[#1565ff] disabled:opacity-40 text-[#93c5fd] text-sm px-3 py-2 rounded-lg transition-all">
+          <Download size={14} /> Exportar página
         </button>
       </div>
 
+      {error && <AdminError message={error} />}
+
       <div className="glass border border-[#1e3a5f] rounded-xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-[#0a1628] border-b border-[#1e3a5f]">
-                {['Tipo', 'Usuario', 'Acción', 'Detalle', 'Fecha y Hora'].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-xs text-[#64748b] font-medium">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {AUDIT_LOG.map(log => (
-                <tr key={log.id} className="table-row-hover border-b border-[#1e3a5f]/50 transition-colors">
-                  <td className="px-4 py-3">
-                    <div className={`w-7 h-7 rounded-full flex items-center justify-center ${log.type === 'add' ? 'bg-green-900/50 text-green-400' : log.type === 'delete' ? 'bg-red-900/50 text-red-400' : log.type === 'import' ? 'bg-blue-900/50 text-blue-400' : log.type === 'settings' ? 'bg-purple-900/50 text-purple-400' : 'bg-yellow-900/50 text-yellow-400'}`}>
-                      {log.type === 'add' ? <Plus size={12} /> : log.type === 'delete' ? <Trash2 size={12} /> : log.type === 'import' ? <Upload size={12} /> : log.type === 'settings' ? <Settings size={12} /> : <Edit2 size={12} />}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-[#93c5fd] text-xs">{log.user}</td>
-                  <td className="px-4 py-3 text-white text-xs font-medium">{log.action}</td>
-                  <td className="px-4 py-3 text-[#64748b] text-xs max-w-xs truncate">{log.detail}</td>
-                  <td className="px-4 py-3 font-mono text-xs text-[#64748b]">{log.date}</td>
+        {loading ? <AdminLoading message="Consultando auditoría…" compact /> : rows.length === 0 ? (
+          <AdminEmpty message="No hay registros de auditoría para este filtro." />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-[#0a1628] border-b border-[#1e3a5f]">
+                  {['Tipo', 'Usuario', 'Entidad', 'Cambios', 'IP', 'Fecha y hora'].map(header => (
+                    <th key={header} className="px-4 py-3 text-left text-xs text-[#64748b] font-medium">{header}</th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {rows.map(log => (
+                  <tr key={log.id} className="table-row-hover border-b border-[#1e3a5f]/50 transition-colors">
+                    <td className="px-4 py-3"><AuditActionBadge action={log.action} /></td>
+                    <td className="px-4 py-3 text-[#93c5fd] text-xs">{log.userEmail ?? 'Sistema'}</td>
+                    <td className="px-4 py-3">
+                      <div className="text-white text-xs font-medium">{log.tableName}</div>
+                      <div className="text-[#64748b] text-xs font-mono max-w-36 truncate">{log.recordId ?? '—'}</div>
+                    </td>
+                    <td className="px-4 py-3 text-[#64748b] text-xs max-w-xs">
+                      {log.changedFields.length > 0 ? log.changedFields.join(', ') : 'Registro completo'}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-xs text-[#64748b]">{log.ipAddress ?? '—'}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-[#64748b]">{formatDate(log.createdAt, true)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div className="flex items-center justify-between px-4 py-3 border-t border-[#1e3a5f] text-xs text-[#64748b]">
+          <span>{totalCount} registros</span>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setPage(current => Math.max(0, current - 1))} disabled={page === 0} className="p-1.5 rounded-lg hover:bg-white/5 disabled:opacity-30">
+              <ChevronLeft size={14} />
+            </button>
+            <span>Página {page + 1} de {totalPages}</span>
+            <button onClick={() => setPage(current => Math.min(totalPages - 1, current + 1))} disabled={page >= totalPages - 1 || totalCount === 0} className="p-1.5 rounded-lg hover:bg-white/5 disabled:opacity-30">
+              <ChevronRight size={14} />
+            </button>
+          </div>
         </div>
       </div>
     </div>
   )
 }
+function AdminNotifications({ onCountChange }: { onCountChange: (count: number) => void }) {
+  const [alerts, setAlerts] = useState<InventoryAlert[]>([])
+  const [dismissed, setDismissed] = useState<Set<string>>(() => new Set())
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-// ─────────────────────────────────────────────
-// ADMIN NOTIFICATIONS
-// ─────────────────────────────────────────────
-function AdminNotifications({ onMarkRead }: { onMarkRead: () => void }) {
-  const [notifications, setNotifications] = useState(NOTIFICATIONS_DATA)
+  const loadAlerts = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      setAlerts(await getInventoryAlerts())
+    } catch {
+      setError('No fue posible consultar las alertas de inventario.')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
-  const markAll = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })))
-    onMarkRead()
+  useEffect(() => {
+    void loadAlerts()
+  }, [loadAlerts])
+
+  const visibleAlerts = alerts.filter(alert => !dismissed.has(alert.productId))
+
+  useEffect(() => {
+    onCountChange(visibleAlerts.length)
+  }, [onCountChange, visibleAlerts.length])
+
+  const dismissAll = () => {
+    setDismissed(new Set(alerts.map(alert => alert.productId)))
+    onCountChange(0)
   }
 
-  const iconMap = { warning: AlertTriangle, error: AlertTriangle, success: CheckCircle, info: Info }
-  const colorMap = { warning: 'text-yellow-400 bg-yellow-900/30 border-yellow-800', error: 'text-red-400 bg-red-900/30 border-red-800', success: 'text-green-400 bg-green-900/30 border-green-800', info: 'text-blue-400 bg-blue-900/30 border-blue-800' }
-
   return (
-    <div className="space-y-3 max-w-2xl">
-      <div className="flex items-center justify-between">
-        <div className="text-[#64748b] text-sm">{notifications.filter(n => !n.read).length} sin leer</div>
-        <button onClick={markAll} className="text-[#1565ff] hover:text-[#00b4d8] text-sm transition-colors">Marcar todas como leídas</button>
+    <div className="space-y-3 max-w-3xl">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-[#64748b] text-sm">{visibleAlerts.length} alertas activas</div>
+        <div className="flex gap-3">
+          <button onClick={loadAlerts} disabled={loading} className="text-[#93c5fd] hover:text-white text-sm transition-colors disabled:opacity-50">Actualizar</button>
+          <button onClick={dismissAll} disabled={visibleAlerts.length === 0} className="text-[#1565ff] hover:text-[#00b4d8] text-sm transition-colors disabled:opacity-40">Ocultar esta sesión</button>
+        </div>
       </div>
-      {notifications.map(n => {
-        const Icon = iconMap[n.type as keyof typeof iconMap]
+
+      {error && <AdminError message={error} onRetry={loadAlerts} />}
+      {loading ? <AdminLoading message="Consultando alertas reales…" /> : visibleAlerts.length === 0 ? (
+        <AdminEmpty message="No hay productos agotados ni por debajo del stock mínimo." />
+      ) : visibleAlerts.map(alert => {
+        const outOfStock = alert.alertType === 'out_of_stock'
         return (
-          <div key={n.id} className={`glass border rounded-xl p-4 flex gap-4 transition-opacity ${n.read ? 'opacity-60' : ''}`}>
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 border ${colorMap[n.type as keyof typeof colorMap]}`}>
-              <Icon size={16} />
+          <div key={alert.productId} className="glass border border-[#1e3a5f] rounded-xl p-4 flex gap-4">
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 border ${outOfStock ? 'text-red-400 bg-red-900/30 border-red-800' : 'text-yellow-400 bg-yellow-900/30 border-yellow-800'}`}>
+              <AlertTriangle size={16} />
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-2">
-                <div className="font-semibold text-white text-sm">{n.title}</div>
-                {!n.read && <div className="w-2 h-2 rounded-full bg-[#1565ff] flex-shrink-0 mt-1.5 badge-pulse" />}
+                <div className="font-semibold text-white text-sm">{outOfStock ? 'Producto agotado' : 'Stock bajo'}</div>
+                <div className="w-2 h-2 rounded-full bg-[#1565ff] flex-shrink-0 mt-1.5 badge-pulse" />
               </div>
-              <p className="text-[#93c5fd] text-xs mt-0.5 leading-relaxed">{n.message}</p>
-              <div className="text-[#64748b] text-xs mt-1">{n.time}</div>
+              <p className="text-[#93c5fd] text-xs mt-0.5 leading-relaxed">
+                {alert.internalCode} · {alert.productName} — {alert.stock} unidades (mínimo: {alert.minStock})
+              </p>
+              <div className="text-[#64748b] text-xs mt-1">Producto actualizado {formatDate(alert.updatedAt, true)}</div>
             </div>
           </div>
         )
@@ -1603,19 +1777,12 @@ function AdminNotifications({ onMarkRead }: { onMarkRead: () => void }) {
     </div>
   )
 }
-
-// ─────────────────────────────────────────────
-// ADMIN PLACEHOLDER SECTIONS
-// ─────────────────────────────────────────────
 function AdminPlaceholder({ title, icon: Icon }: { title: string; icon: React.ComponentType<{ size?: number; className?: string }> }) {
   return (
     <div className="flex flex-col items-center justify-center h-64 glass border border-[#1e3a5f] rounded-xl text-center">
       <Icon size={40} className="text-[#1565ff]/40 mb-3" />
       <p className="text-white font-semibold">{title}</p>
-      <p className="text-[#64748b] text-sm mt-1">Módulo en desarrollo</p>
-      <button className="mt-4 flex items-center gap-2 bg-[#1565ff] hover:bg-[#1252d3] text-white text-sm font-semibold px-4 py-2 rounded-lg transition-all">
-        <Plus size={14} /> Crear nuevo
-      </button>
+      <p className="text-[#64748b] text-sm mt-1 max-w-md px-4">La base de datos y sus políticas ya están preparadas. La interfaz CRUD de este módulo será la siguiente fase.</p>
     </div>
   )
 }
@@ -1624,9 +1791,30 @@ function AdminPlaceholder({ title, icon: Icon }: { title: string; icon: React.Co
 // ADMIN PANEL WRAPPER
 // ─────────────────────────────────────────────
 function AdminPanel({ onPublic }: { onPublic: () => void }) {
+  const { profile, signOut } = useAuth()
   const [adminView, setAdminView] = useState<AdminView>('dashboard')
   const [collapsed, setCollapsed] = useState(false)
-  const [notifCount, setNotifCount] = useState(3)
+  const [notifCount, setNotifCount] = useState(0)
+
+  const refreshAlertCount = useCallback(async () => {
+    try {
+      setNotifCount((await getInventoryAlerts(200)).length)
+    } catch {
+      setNotifCount(0)
+    }
+  }, [])
+
+  useEffect(() => {
+    void refreshAlertCount()
+    const interval = window.setInterval(() => void refreshAlertCount(), 60_000)
+    return () => window.clearInterval(interval)
+  }, [refreshAlertCount])
+
+  const handleSignOut = () => {
+    void signOut().finally(onPublic)
+  }
+
+  if (!profile) return <AdminLoading message="Validando perfil autorizado…" />
 
   const adminTitles: Record<AdminView, { title: string; subtitle: string }> = {
     dashboard: { title: 'Dashboard', subtitle: 'Resumen general de la operación' },
@@ -1636,6 +1824,7 @@ function AdminPanel({ onPublic }: { onPublic: () => void }) {
     brands: { title: 'Marcas', subtitle: 'Gestión de marcas comercializadas' },
     suppliers: { title: 'Proveedores', subtitle: 'Base de datos de proveedores' },
     clients: { title: 'Clientes', subtitle: 'Registro y gestión de clientes' },
+    users: { title: 'Usuarios', subtitle: 'Roles, estado y control de acceso' },
     orders: { title: 'Órdenes', subtitle: 'Seguimiento de pedidos y consultas' },
     import: { title: 'Importar Excel', subtitle: 'Actualización masiva de inventario' },
     reports: { title: 'Reportes', subtitle: 'Análisis y reportes de gestión' },
@@ -1648,9 +1837,9 @@ function AdminPanel({ onPublic }: { onPublic: () => void }) {
 
   return (
     <div className="min-h-screen bg-[#060d1a] flex">
-      <AdminSidebar current={adminView} onNav={setAdminView} onPublic={onPublic} collapsed={collapsed} setCollapsed={setCollapsed} />
+      <AdminSidebar current={adminView} onNav={setAdminView} onPublic={onPublic} onSignOut={handleSignOut} permissions={profile.permissions} collapsed={collapsed} setCollapsed={setCollapsed} />
       <div className={`flex-1 flex flex-col min-h-screen transition-all duration-300 ${collapsed ? 'ml-16' : 'ml-56'}`}>
-        <AdminTopbar title={title} subtitle={subtitle} notifications={notifCount} />
+        <AdminTopbar title={title} subtitle={subtitle} notifications={notifCount} profile={profile} onNotifications={() => setAdminView('notifications')} />
         <main className="flex-1 p-6 overflow-auto">
           {/* Breadcrumb */}
           <div className="flex items-center gap-2 text-xs text-[#64748b] mb-5">
@@ -1659,11 +1848,12 @@ function AdminPanel({ onPublic }: { onPublic: () => void }) {
             <span className="text-[#93c5fd]">{title}</span>
           </div>
 
-          {adminView === 'dashboard' && <AdminDashboard />}
-          {adminView === 'inventory' && <AdminInventory />}
+          {adminView === 'dashboard' && <AdminDashboard onAudit={() => setAdminView('audit')} />}
+          {adminView === 'inventory' && <AdminInventory onAdd={() => setAdminView('products')} />}
           {adminView === 'import' && <AdminImport />}
           {adminView === 'audit' && <AdminAudit />}
-          {adminView === 'notifications' && <AdminNotifications onMarkRead={() => setNotifCount(0)} />}
+          {adminView === 'notifications' && <AdminNotifications onCountChange={setNotifCount} />}
+          {adminView === 'users' && <UserManagement currentUser={profile} />}
           {adminView === 'products' && <AdminPlaceholder title="Gestión de Productos" icon={Package} />}
           {adminView === 'categories' && <AdminPlaceholder title="Gestión de Categorías" icon={Tag} />}
           {adminView === 'brands' && <AdminPlaceholder title="Gestión de Marcas" icon={Award} />}
@@ -1701,6 +1891,7 @@ function HomePage({ onSearch, onDetail, onCatalog }: {
 // ROOT APP
 // ─────────────────────────────────────────────
 export default function App() {
+  const { session, profile, loading: authLoading, authError, signOut } = useAuth()
   const [view, setView] = useState<View>('home')
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [catalogQuery, setCatalogQuery] = useState('')
@@ -1726,12 +1917,57 @@ export default function App() {
     else setView('home')
   }
 
-  if (view === 'admin') return <AdminPanel onPublic={() => { setView('home'); window.scrollTo({ top: 0 }) }} />
+  const returnToPublic = () => {
+    setView('home')
+    window.scrollTo({ top: 0 })
+  }
+
+  if (view === 'account') {
+    if (authLoading) {
+      return (
+        <div className="min-h-screen bg-[#060d1a] flex items-center justify-center">
+          <AdminLoading message="Validando sesión segura…" />
+        </div>
+      )
+    }
+
+    if (!session) return <LoginPage onBack={returnToPublic} />
+
+    if (authError || !profile) {
+      return (
+        <div className="min-h-screen bg-[#060d1a] flex items-center justify-center px-4">
+          <div className="glass border border-red-800/60 rounded-2xl p-7 max-w-lg text-center">
+            <AlertTriangle size={36} className="mx-auto text-red-400 mb-3" />
+            <h1 className="font-display text-2xl font-bold text-white">Acceso no disponible</h1>
+            <p className="text-[#93c5fd] text-sm mt-2">{authError ?? 'No existe un perfil autorizado para esta sesión.'}</p>
+            <div className="flex justify-center gap-3 mt-5">
+              <button onClick={returnToPublic} className="glass border border-[#1e3a5f] text-[#93c5fd] px-4 py-2 rounded-lg text-sm">Volver al sitio</button>
+              <button onClick={() => void signOut()} className="bg-red-700 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm">Cerrar sesión</button>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    if (profile.role.code === 'customer') {
+      return (
+        <CustomerPortal
+          profile={profile}
+          onCatalog={() => goToCatalog()}
+          onPublic={returnToPublic}
+          onSignOut={() => { void signOut().finally(returnToPublic) }}
+        />
+      )
+    }
+
+    return <AdminPanel onPublic={returnToPublic} />
+  }
 
   return (
     <div className="min-h-screen bg-[#060d1a]">
       <PublicNavbar
-        onAdminClick={() => setView('admin')}
+        onAccountClick={() => setView('account')}
+        accountLabel={!session ? 'Iniciar sesión' : profile?.role.code === 'customer' ? 'Mi cuenta' : 'Panel de gestión'}
         currentSection={navSection}
         onNav={handleNav}
       />
@@ -1756,7 +1992,7 @@ export default function App() {
         />
       )}
 
-      {view !== 'admin' && <Footer onNav={handleNav} />}
+      <Footer onNav={handleNav} />
     </div>
   )
 }

@@ -1,0 +1,11 @@
+{
+  "title": "Bahía Nacho | Repuestos y motores náuticos",
+  "description": "Catálogo de motores fuera de borda, repuestos, accesorios y servicios técnicos de Bahía Nacho.",
+  "language": "es",
+  "robots": {
+    "index": true
+  },
+  "accessibility": {
+    "addBypassLinks": true
+  }
+}

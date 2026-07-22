@@ -1,6 +1,8 @@
 # Dependencies
 node_modules/
 .pnpm-store/
+AGENTS.md
+
 
 # Build output
 dist/
@@ -31,6 +33,7 @@ Thumbs.db
 # Temporary files
 tmp/
 temp/
+supabase/.temp/
 
 # Swap files
 *.swp
