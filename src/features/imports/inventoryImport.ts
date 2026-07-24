@@ -2,6 +2,7 @@ import { supabase } from '../../lib/supabase'
 
 const MAX_FILE_BYTES = 5 * 1024 * 1024
 const MAX_ROWS = 2_000
+const MAX_HEADER_SCAN_ROWS = 100
 const SUPPORTED_EXTENSIONS = new Set(['xls', 'xlsx'])
 
 type IssueSeverity = 'error' | 'warning'
@@ -66,19 +67,39 @@ type ColumnKey =
   | 'longDescription'
 
 const REQUIRED_COLUMNS: Array<{ key: ColumnKey; aliases: string[]; label: string }> = [
-  { key: 'internalCode', aliases: ['codigo'], label: 'Codigo' },
-  { key: 'name', aliases: ['nombreproducto'], label: 'Nombre Producto' },
-  { key: 'stock', aliases: ['cantidad'], label: 'Cantidad' },
-  { key: 'purchasePrice', aliases: ['ultvalcompra', 'ultimovalorcompra'], label: 'Ult. Val. Compra' },
-  { key: 'salePrice', aliases: ['preciomedio'], label: 'PrecioMedio' },
+  {
+    key: 'internalCode',
+    aliases: ['codigo', 'codigoproducto', 'codproducto', 'codigointerno', 'sku'],
+    label: 'Codigo',
+  },
+  {
+    key: 'name',
+    aliases: ['nombreproducto', 'nombre', 'producto', 'descripcionproducto'],
+    label: 'Nombre Producto',
+  },
+  {
+    key: 'stock',
+    aliases: ['cantidad', 'stock', 'saldo', 'existencia', 'existencias', 'cantidadactual'],
+    label: 'Cantidad',
+  },
+  {
+    key: 'purchasePrice',
+    aliases: ['ultvalcompra', 'ultimovalorcompra', 'preciocompra', 'costocompra', 'costounitario', 'costo'],
+    label: 'Ult. Val. Compra',
+  },
+  {
+    key: 'salePrice',
+    aliases: ['preciomedio', 'precioventa', 'valorventa', 'pvp', 'precio'],
+    label: 'PrecioMedio',
+  },
 ]
 
 const OPTIONAL_COLUMNS: Array<{ key: ColumnKey; aliases: string[] }> = [
-  { key: 'oemCode', aliases: ['referencia', 'codigooem'] },
-  { key: 'categoryName', aliases: ['nombrecategoria', 'categoria'] },
-  { key: 'brandName', aliases: ['marca'] },
-  { key: 'shortDescription', aliases: ['descripcioncorta'] },
-  { key: 'longDescription', aliases: ['descripcionlarga'] },
+  { key: 'oemCode', aliases: ['referencia', 'codigooem', 'referenciafabricante', 'ref'] },
+  { key: 'categoryName', aliases: ['nombrecategoria', 'categoria', 'familia', 'linea'] },
+  { key: 'brandName', aliases: ['marca', 'fabricante'] },
+  { key: 'shortDescription', aliases: ['descripcioncorta', 'descripcionbreve'] },
+  { key: 'longDescription', aliases: ['descripcionlarga', 'descripcionextendida', 'detalle'] },
 ]
 
 function getExtension(fileName: string) {
@@ -150,19 +171,52 @@ async function sha256Hex(buffer: ArrayBuffer) {
   return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
 }
 
-function findHeaderRow(rows: unknown[][]) {
-  const candidates = rows.slice(0, 10)
+type HeaderCandidate = {
+  sheetName: string
+  rows: unknown[][]
+  rowIndex: number
+  score: number
+  columns: Map<ColumnKey, number>
+}
 
-  for (let rowIndex = 0; rowIndex < candidates.length; rowIndex += 1) {
-    const normalized = candidates[rowIndex].map(normalizeHeader)
-    const requiredMatches = REQUIRED_COLUMNS.filter(column =>
-      column.aliases.some(alias => normalized.includes(alias)),
-    ).length
+function scoreHeader(header: unknown[]) {
+  const columns = buildColumnMap(header)
+  const requiredMatches = REQUIRED_COLUMNS.filter(column => columns.has(column.key)).length
+  const optionalMatches = OPTIONAL_COLUMNS.filter(column => columns.has(column.key)).length
 
-    if (requiredMatches === REQUIRED_COLUMNS.length) return rowIndex
+  return {
+    columns,
+    score: requiredMatches * 10 + optionalMatches,
+    complete: requiredMatches === REQUIRED_COLUMNS.length,
+  }
+}
+
+function findHeaderCandidate(
+  sheetNames: string[],
+  readRows: (sheetName: string) => unknown[][],
+) {
+  let best: HeaderCandidate | null = null
+
+  for (const sheetName of sheetNames) {
+    const rows = readRows(sheetName)
+    const scanLength = Math.min(rows.length, MAX_HEADER_SCAN_ROWS)
+
+    for (let rowIndex = 0; rowIndex < scanLength; rowIndex += 1) {
+      const result = scoreHeader(rows[rowIndex])
+      const candidate: HeaderCandidate = {
+        sheetName,
+        rows,
+        rowIndex,
+        score: result.score,
+        columns: result.columns,
+      }
+
+      if (!best || candidate.score > best.score) best = candidate
+      if (result.complete) return candidate
+    }
   }
 
-  return -1
+  return best
 }
 
 function buildColumnMap(header: unknown[]) {
@@ -204,25 +258,35 @@ export async function parseInventoryWorkbook(file: File): Promise<InventoryWorkb
     cellHTML: false,
     cellStyles: false,
   })
-  const sheetName = workbook.SheetNames[0]
-  if (!sheetName) throw new Error('El archivo no contiene hojas de cálculo.')
+  if (workbook.SheetNames.length === 0) throw new Error('El archivo no contiene hojas de cálculo.')
 
-  const sheet = workbook.Sheets[sheetName]
-  const sourceRows = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
-    header: 1,
-    raw: false,
-    defval: '',
-    blankrows: false,
+  const candidate = findHeaderCandidate(workbook.SheetNames, sheetName => {
+    const sheet = workbook.Sheets[sheetName]
+    return XLSX.utils.sheet_to_json<unknown[]>(sheet, {
+      header: 1,
+      raw: false,
+      defval: '',
+      blankrows: true,
+    })
   })
-  const headerIndex = findHeaderRow(sourceRows)
-  if (headerIndex < 0) {
-    throw new Error('No se encontró la fila de encabezados esperada en las primeras 10 filas.')
-  }
 
-  const columns = buildColumnMap(sourceRows[headerIndex])
+  if (!candidate) throw new Error('El archivo no contiene filas que puedan utilizarse como encabezados.')
+
+  const { sheetName, rows: sourceRows, rowIndex: headerIndex, columns } = candidate
   const missingColumns = REQUIRED_COLUMNS.filter(column => !columns.has(column.key))
   if (missingColumns.length > 0) {
-    throw new Error(`Faltan columnas obligatorias: ${missingColumns.map(column => column.label).join(', ')}.`)
+    const detectedHeaders = sourceRows[headerIndex]
+      .map(value => cleanText(value, 60))
+      .filter(Boolean)
+      .slice(0, 12)
+      .join(', ')
+    const detectedMessage = detectedHeaders
+      ? ` Encabezados más cercanos en “${sheetName}”, fila ${headerIndex + 1}: ${detectedHeaders}.`
+      : ''
+
+    throw new Error(
+      `No se pudo reconocer la estructura del Excel. Faltan: ${missingColumns.map(column => column.label).join(', ')}.${detectedMessage}`,
+    )
   }
 
   const dataRows = sourceRows

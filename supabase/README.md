@@ -73,6 +73,13 @@ Formatos permitidos: JPEG, PNG, WebP y AVIF. Tamaño máximo: 10 MiB.
 - `202607220006_unified_user_access.sql`: rol Cliente, vínculo autenticado, permisos actuales, portal privado y administración segura de rol/estado.
 - `202607220007_fix_user_access_function_types.sql`: tipado explícito de la protección del último administrador.
 - `202607230008_inventory_import_and_product_images.sql`: importación idempotente, conciliación de stock, archivo privado y cambio transaccional de imagen principal.
+- `202607230009_secure_public_catalog.sql`: RPC pública de catálogo y cierre del acceso directo a códigos, costos, stock exacto, motores e imágenes.
+
+## Separación entre ERP y catálogo público
+
+La web pública consulta exclusivamente `get_public_catalog()`. Esta función devuelve nombre, referencia, marca, categoría, descripción, precio, imágenes, compatibilidades y una etiqueta de disponibilidad.
+
+No devuelve código interno, costo de compra, IVA, stock exacto, mínimos, ubicación, proveedor ni estado administrativo. Los roles internos siguen consultando `product_catalog` bajo permisos `products.read` e `inventory.read`; clientes y usuarios anónimos no pueden leer directamente las tablas administrativas.
 
 ## Importación del inventario
 

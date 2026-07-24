@@ -20,7 +20,11 @@ import { CustomerPortal } from './features/customer/CustomerPortal'
 import { UserManagement } from './features/admin/UserManagement'
 import { InventoryImportPanel } from './features/admin/InventoryImportPanel'
 import { ProductImageManager } from './features/admin/ProductImageManager'
-import { getPublicCatalog, type CatalogProduct } from './features/catalog/catalogService'
+import {
+  getPublicCatalog,
+  type CatalogProduct,
+  type ProductAvailability,
+} from './features/catalog/catalogService'
 import {
   getAuditPage,
   getDashboardSnapshot,
@@ -63,7 +67,7 @@ const SERVICES = [
 
 const FAQS = [
   { q: '¿Los repuestos son originales?', a: 'Manejamos tanto repuestos OEM (originales del fabricante) como alternativos de alta calidad. Todos nuestros productos cuentan con certificación de calidad y garantía.' },
-  { q: '¿Cómo sé si el repuesto es compatible con mi motor?', a: 'Puedes buscar por código OEM, modelo de motor, año o potencia. Nuestro equipo técnico también está disponible vía WhatsApp para asesorarte en la selección correcta.' },
+  { q: '¿Cómo sé si el repuesto es compatible con mi motor?', a: 'Puedes buscar por referencia, modelo de motor, año o potencia. Nuestro equipo técnico también está disponible vía WhatsApp para asesorarte en la selección correcta.' },
   { q: '¿Tienen servicio de envío a todo el país?', a: 'Sí, realizamos envíos a todo el territorio nacional mediante operadores de carga especializados. El tiempo de entrega varía entre 1-3 días hábiles según la ciudad destino.' },
   { q: '¿Cuál es la garantía de los productos?', a: 'Los repuestos originales tienen garantía de fábrica (6-24 meses según fabricante). Los productos alternativos cuentan con 6 meses de garantía por defectos de fabricación.' },
   { q: '¿Ofrecen crédito o financiamiento?', a: 'Sí, manejamos crédito para clientes frecuentes con historial de compra. Contáctenos para conocer los requisitos y condiciones del crédito empresarial.' },
@@ -100,6 +104,16 @@ function StockBadge({ stock, min }: { stock: number; min: number }) {
   if (stock === 0) return <span className="inline-flex items-center gap-1 bg-red-900/40 text-red-400 text-xs px-2 py-0.5 rounded-full border border-red-800">Agotado</span>
   if (stock <= min) return <span className="inline-flex items-center gap-1 bg-yellow-900/40 text-yellow-400 text-xs px-2 py-0.5 rounded-full border border-yellow-800">Stock Bajo</span>
   return <span className="inline-flex items-center gap-1 bg-green-900/40 text-green-400 text-xs px-2 py-0.5 rounded-full border border-green-800">Disponible</span>
+}
+
+function AvailabilityBadge({ availability }: { availability: ProductAvailability }) {
+  if (availability === 'out_of_stock') {
+    return <span className="inline-flex items-center gap-1 rounded-full border border-red-800 bg-red-900/40 px-2 py-0.5 text-xs text-red-400">Agotado</span>
+  }
+  if (availability === 'low_stock') {
+    return <span className="inline-flex items-center gap-1 rounded-full border border-yellow-800 bg-yellow-900/40 px-2 py-0.5 text-xs text-yellow-400">Pocas unidades</span>
+  }
+  return <span className="inline-flex items-center gap-1 rounded-full border border-green-800 bg-green-900/40 px-2 py-0.5 text-xs text-green-400">Disponible</span>
 }
 
 function Stars({ rating }: { rating: number }) {
@@ -238,7 +252,7 @@ function HeroSection({ onSearch }: { onSearch: (q: string) => void }) {
                 value={query}
                 onChange={e => setQuery(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleSearch()}
-                placeholder="Buscar por nombre, código OEM, referencia o modelo…"
+                placeholder="Buscar por nombre, referencia, marca o modelo…"
                 className="w-full bg-transparent pl-11 pr-4 py-4 text-white placeholder-[#64748b] text-base outline-none"
               />
             </div>
@@ -304,7 +318,7 @@ function ProductCard({ product, onDetail }: { product: Product; onDetail: (p: Pr
         />
         <div className="absolute inset-0 bg-gradient-to-t from-[#060d1a]/60 to-transparent" />
         <div className="absolute top-3 left-3">
-          <StockBadge stock={product.stock} min={product.minStock} />
+          <AvailabilityBadge availability={product.availability} />
         </div>
         {product.featured && (
           <div className="absolute top-3 right-3 bg-[#1565ff] text-white text-xs px-2 py-0.5 rounded-full font-semibold">
@@ -313,7 +327,7 @@ function ProductCard({ product, onDetail }: { product: Product; onDetail: (p: Pr
         )}
       </div>
       <div className="p-4">
-        <div className="font-mono text-xs text-[#64748b] mb-1">{product.code} · {product.oemCode}</div>
+        <div className="font-mono text-xs text-[#64748b] mb-1">Referencia: {product.oemCode}</div>
         <h3 className="font-semibold text-white text-sm leading-snug mb-2 line-clamp-2">{product.name}</h3>
         <div className="flex items-center gap-1.5 mb-3">
           <span className="bg-[#0a2a5e] text-[#93c5fd] text-xs px-2 py-0.5 rounded-full">{product.brand}</span>
@@ -326,7 +340,7 @@ function ProductCard({ product, onDetail }: { product: Product; onDetail: (p: Pr
         )}
         <div className="flex items-center justify-between">
           <span className="font-display text-xl font-bold text-white">{formatPrice(product.price, product.currencyCode)}</span>
-          <WhatsAppBtn text={`Hola, me interesa el producto: ${product.name} (${product.code})`} small />
+          <WhatsAppBtn text={`Hola, me interesa el producto: ${product.name} (Referencia: ${product.oemCode})`} small />
         </div>
       </div>
     </div>
@@ -375,10 +389,12 @@ function CatalogPage({
 
   const filtered = products.filter(p => {
     const q = query.toLowerCase()
-    const matchQ = !q || p.name.toLowerCase().includes(q) || p.code.toLowerCase().includes(q) || p.oemCode.toLowerCase().includes(q) || p.brand.toLowerCase().includes(q) || p.compatibility.some(c => c.toLowerCase().includes(q))
+    const matchQ = !q || p.name.toLowerCase().includes(q) || p.oemCode.toLowerCase().includes(q) || p.brand.toLowerCase().includes(q) || p.compatibility.some(c => c.toLowerCase().includes(q))
     const matchBrand = selectedBrands.length === 0 || selectedBrands.includes(p.brand)
     const matchCat = selectedCats.length === 0 || selectedCats.includes(p.category)
-    const matchAvail = availability === 'all' || (availability === 'available' && p.stock > 0) || (availability === 'low' && p.stock <= p.minStock && p.stock > 0)
+    const matchAvail = availability === 'all'
+      || (availability === 'available' && p.availability === 'available')
+      || (availability === 'low' && p.availability === 'low_stock')
     const matchPrice = p.price <= effectivePriceMax
     return matchQ && matchBrand && matchCat && matchAvail && matchPrice
   })
@@ -412,7 +428,7 @@ function CatalogPage({
             type="text"
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder="Buscar por nombre, código, referencia o modelo…"
+            placeholder="Buscar por nombre, referencia, marca o compatibilidad…"
             className="w-full glass border border-[#1e3a5f] focus:border-[#1565ff] bg-transparent pl-10 pr-4 py-3 text-white placeholder-[#64748b] rounded-xl outline-none transition-all"
           />
         </div>
@@ -448,7 +464,7 @@ function CatalogPage({
               <div className="glass border border-[#1e3a5f] rounded-xl p-4">
                 <h3 className="font-semibold text-white text-sm mb-3">Disponibilidad</h3>
                 <div className="space-y-2">
-                  {[['all', 'Todos'], ['available', 'En stock'], ['low', 'Stock bajo']].map(([v, l]) => (
+                  {[['all', 'Todos'], ['available', 'Disponible'], ['low', 'Pocas unidades']].map(([v, l]) => (
                     <label key={v} className="flex items-center gap-2 cursor-pointer group">
                       <input type="radio" name="avail" value={v} checked={availability === v} onChange={() => setAvailability(v as 'all' | 'available' | 'low')} className="accent-[#1565ff]" />
                       <span className="text-sm text-[#93c5fd] group-hover:text-white transition-colors">{l}</span>
@@ -512,17 +528,17 @@ function ProductListRow({ product, onDetail }: { product: Product; onDetail: (p:
       <img src={product.image} alt={product.name} className="w-20 h-20 object-cover rounded-lg flex-shrink-0 bg-[#0a1628]"
         onError={e => { (e.target as HTMLImageElement).src = '/bahia-nacho-favicon.png' }} />
       <div className="flex-1 min-w-0">
-        <div className="font-mono text-xs text-[#64748b] mb-0.5">{product.code} · {product.oemCode}</div>
+        <div className="font-mono text-xs text-[#64748b] mb-0.5">Referencia: {product.oemCode}</div>
         <h3 className="font-semibold text-white text-sm mb-1">{product.name}</h3>
         <div className="flex items-center gap-2 flex-wrap">
           <span className="bg-[#0a2a5e] text-[#93c5fd] text-xs px-2 py-0.5 rounded-full">{product.brand}</span>
-          <StockBadge stock={product.stock} min={product.minStock} />
+          <AvailabilityBadge availability={product.availability} />
           {product.compatibility.length > 0 && <span className="text-[#64748b] text-xs">{product.compatibility.slice(0, 2).join(', ')}</span>}
         </div>
       </div>
       <div className="flex flex-col items-end justify-between flex-shrink-0">
         <span className="font-display text-xl font-bold text-white">{formatPrice(product.price, product.currencyCode)}</span>
-        <WhatsAppBtn text={`Consulta: ${product.name} (${product.code})`} small />
+        <WhatsAppBtn text={`Consulta: ${product.name} (Referencia: ${product.oemCode})`} small />
       </div>
     </div>
   )
@@ -580,12 +596,12 @@ function ProductDetailPage({
 
             <h1 className="font-display text-3xl font-bold text-white mb-2">{product.name}</h1>
             <div className="font-mono text-sm text-[#64748b] mb-4">
-              Código: <span className="text-[#00b4d8]">{product.code}</span> · OEM: <span className="text-[#00b4d8]">{product.oemCode}</span>
+              Referencia: <span className="text-[#00b4d8]">{product.oemCode}</span>
             </div>
 
             <div className="flex items-center gap-4 mb-6">
               <span className="font-display text-4xl font-bold text-white">{formatPrice(product.price, product.currencyCode)}</span>
-              <StockBadge stock={product.stock} min={product.minStock} />
+              <AvailabilityBadge availability={product.availability} />
             </div>
 
             <p className="text-[#93c5fd] leading-relaxed mb-6">{product.description}</p>
@@ -612,19 +628,11 @@ function ProductDetailPage({
                     <span className="text-white font-medium">{v}</span>
                   </div>
                 ))}
-                <div className="flex justify-between text-xs border-b border-[#1e3a5f] pb-1">
-                  <span className="text-[#64748b]">Peso</span>
-                  <span className="text-white font-medium">{product.weight}</span>
-                </div>
-                <div className="flex justify-between text-xs border-b border-[#1e3a5f] pb-1">
-                  <span className="text-[#64748b]">Stock</span>
-                  <span className="text-white font-medium font-mono">{product.stock} uds.</span>
-                </div>
               </div>
             </div>
 
             <div className="flex flex-col sm:flex-row gap-3">
-              <WhatsAppBtn text={`Hola! Quiero consultar sobre: ${product.name}\nCódigo: ${product.code}\nOEM: ${product.oemCode}`} />
+              <WhatsAppBtn text={`Hola! Quiero consultar sobre: ${product.name}\nReferencia: ${product.oemCode}`} />
               <button className="flex items-center justify-center gap-2 glass border border-[#1e3a5f] hover:border-[#1565ff] text-[#93c5fd] hover:text-white px-5 py-2.5 rounded-lg transition-all font-semibold text-sm">
                 <Phone size={16} /> Llamar
               </button>
