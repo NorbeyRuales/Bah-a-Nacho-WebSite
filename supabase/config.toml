@@ -39,3 +39,6 @@ enable_anonymous_sign_ins = false
 minimum_password_length = 10
 password_requirements = "lower_upper_letters_digits_symbols"
 
+[functions.admin-users]
+enabled = true
+verify_jwt = false

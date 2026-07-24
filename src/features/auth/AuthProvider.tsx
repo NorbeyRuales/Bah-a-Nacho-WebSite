@@ -6,9 +6,9 @@ import {
   useMemo,
   useState,
   type ReactNode,
-} from 'react'
-import type { Session } from '@supabase/supabase-js'
-import { supabase } from '../../lib/supabase'
+} from "react"
+import type { Session } from "@supabase/supabase-js"
+import { supabase } from "../../lib/supabase"
 
 export type UserRole = {
   id: string
@@ -21,7 +21,7 @@ export type UserProfile = {
   firstName: string
   lastName: string
   email: string
-  status: 'active' | 'inactive'
+  status: "active" | "inactive"
   lastAccessAt: string | null
   role: UserRole
   permissions: string[]
@@ -43,10 +43,14 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 
 function normalizeRole(role: unknown): UserRole | null {
   const value = Array.isArray(role) ? role[0] : role
-  if (!value || typeof value !== 'object') return null
+  if (!value || typeof value !== "object") return null
 
   const record = value as Record<string, unknown>
-  if (typeof record.id !== 'string' || typeof record.code !== 'string' || typeof record.name !== 'string') {
+  if (
+    typeof record.id !== "string" ||
+    typeof record.code !== "string" ||
+    typeof record.name !== "string"
+  ) {
     return null
   }
 
@@ -60,31 +64,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [authError, setAuthError] = useState<string | null>(null)
 
   const loadProfile = useCallback(async (userId: string) => {
-    const [{ data, error }, { data: permissionsData, error: permissionsError }] = await Promise.all([
+    const [
+      { data, error },
+      { data: permissionsData, error: permissionsError },
+    ] = await Promise.all([
       supabase
-        .from('profiles')
-        .select('id, first_name, last_name, email, status, last_access_at, role:roles!profiles_role_id_fkey(id, code, name)')
-        .eq('id', userId)
+        .from("profiles")
+        .select(
+          "id, first_name, last_name, email, status, archived_at, last_access_at, role:roles!profiles_role_id_fkey(id, code, name)",
+        )
+        .eq("id", userId)
         .single(),
-      supabase.rpc('current_permissions'),
+      supabase.rpc("current_permissions"),
     ])
 
     if (error || permissionsError || !data) {
       setProfile(null)
-      setAuthError('La sesión existe, pero no fue posible cargar el perfil autorizado.')
+      setAuthError(
+        "La sesión existe, pero no fue posible cargar el perfil autorizado.",
+      )
       return
     }
 
     const role = normalizeRole(data.role)
     if (!role) {
       setProfile(null)
-      setAuthError('El usuario no tiene un rol válido asignado.')
+      setAuthError("El usuario no tiene un rol válido asignado.")
       return
     }
 
-    if (data.status !== 'active') {
+    if (data.archived_at) {
       setProfile(null)
-      setAuthError('El usuario está inactivo. Contacta a un administrador.')
+      setAuthError(
+        "El usuario fue eliminado. Contacta a un administrador si necesitas restaurar el acceso.",
+      )
+      return
+    }
+
+    if (data.status !== "active") {
+      setProfile(null)
+      setAuthError("El usuario está inactivo. Contacta a un administrador.")
       return
     }
 
@@ -97,12 +116,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       lastAccessAt: data.last_access_at,
       role,
       permissions: Array.isArray(permissionsData)
-        ? permissionsData.filter((permission): permission is string => typeof permission === 'string')
+        ? permissionsData.filter(
+            (permission): permission is string =>
+              typeof permission === "string",
+          )
         : [],
     })
     setAuthError(null)
 
-    await supabase.rpc('touch_last_access')
+    await supabase.rpc("touch_last_access")
   }, [])
 
   useEffect(() => {
@@ -113,7 +135,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!active) return
 
       if (error) {
-        setAuthError('No fue posible restaurar la sesión de forma segura.')
+        setAuthError("No fue posible restaurar la sesión de forma segura.")
         setLoading(false)
         return
       }
@@ -125,24 +147,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     void initialize()
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      if (!active) return
-      setSession(nextSession)
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (_event, nextSession) => {
+        if (!active) return
+        setSession(nextSession)
 
-      if (!nextSession) {
-        setProfile(null)
-        setAuthError(null)
-        setLoading(false)
-        return
-      }
+        if (!nextSession) {
+          setProfile(null)
+          setAuthError(null)
+          setLoading(false)
+          return
+        }
 
-      setLoading(true)
-      window.setTimeout(() => {
-        void loadProfile(nextSession.user.id).finally(() => {
-          if (active) setLoading(false)
-        })
-      }, 0)
-    })
+        setLoading(true)
+        window.setTimeout(() => {
+          void loadProfile(nextSession.user.id).finally(() => {
+            if (active) setLoading(false)
+          })
+        }, 0)
+      },
+    )
 
     return () => {
       active = false
@@ -150,21 +174,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [loadProfile])
 
-  const signIn = useCallback(async (email: string, password: string): Promise<SignInResult> => {
-    setAuthError(null)
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: email.trim().toLowerCase(),
-      password,
-    })
+  const signIn = useCallback(
+    async (email: string, password: string): Promise<SignInResult> => {
+      setAuthError(null)
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password,
+      })
 
-    if (error || !data.session) {
-      return { error: 'No fue posible iniciar sesión. Verifica tus credenciales e inténtalo nuevamente.' }
-    }
+      if (error || !data.session) {
+        return {
+          error:
+            "No fue posible iniciar sesión. Verifica tus credenciales e inténtalo nuevamente.",
+        }
+      }
 
-    setSession(data.session)
-    await loadProfile(data.session.user.id)
-    return { error: null }
-  }, [loadProfile])
+      setSession(data.session)
+      await loadProfile(data.session.user.id)
+      return { error: null }
+    },
+    [loadProfile],
+  )
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut()
@@ -180,21 +210,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(false)
   }, [loadProfile, session])
 
-  const value = useMemo<AuthContextValue>(() => ({
-    session,
-    profile,
-    loading,
-    authError,
-    signIn,
-    signOut,
-    refreshProfile,
-  }), [authError, loading, profile, refreshProfile, session, signIn, signOut])
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      session,
+      profile,
+      loading,
+      authError,
+      signIn,
+      signOut,
+      refreshProfile,
+    }),
+    [authError, loading, profile, refreshProfile, session, signIn, signOut],
+  )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
 export function useAuth() {
   const context = useContext(AuthContext)
-  if (!context) throw new Error('useAuth debe utilizarse dentro de AuthProvider.')
+  if (!context)
+    throw new Error("useAuth debe utilizarse dentro de AuthProvider.")
   return context
 }

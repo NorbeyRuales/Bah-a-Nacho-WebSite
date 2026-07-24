@@ -77,6 +77,23 @@ Formatos permitidos: JPEG, PNG, WebP y AVIF. Tamaño máximo: 10 MiB.
 - `202607240011_fix_excel_imports_updated_at.sql`: agrega la marca de modificación requerida por el trigger del historial de importaciones.
 - `202607240012_admin_product_management.sql`: creación y edición manual segura de productos con ajuste transaccional de inventario.
 - `202607240013_category_hierarchy_integrity.sql`: protección de integridad contra ciclos en la jerarquía de subcategorías.
+- `202607240014_brand_data_integrity.sql`: integridad adicional de nombres, slugs y recursos de marcas.
+- `202607240015_user_management_crud.sql`: CRUD administrativo de usuarios, baja lógica, restauración e índices de listado.
+- `202607240016_safe_user_invite_provisioning.sql`: evita crear fichas comerciales para cuentas internas invitadas.
+
+## Gestión completa de usuarios
+
+El módulo **Usuarios** permite crear cuentas mediante invitación, editar nombre, correo,
+rol y estado, enviar correos de restablecimiento, archivar y restaurar usuarios. La
+eliminación es lógica: la identidad de Supabase Auth y las referencias históricas se
+conservan para no romper movimientos, cotizaciones ni auditorías.
+
+Las operaciones que modifican Supabase Auth se ejecutan en la Edge Function
+`admin-users`. La función valida por sí misma el token de acceso y el permiso
+`users.manage`; la `service_role` nunca se entrega al navegador. La función se despliega
+con verificación JWT de plataforma desactivada porque admite claves públicas modernas y
+realiza una verificación explícita con `auth.getUser(token)` antes de procesar cualquier
+acción.
 
 ## Separación entre ERP y catálogo público
 
