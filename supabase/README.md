@@ -74,6 +74,7 @@ Formatos permitidos: JPEG, PNG, WebP y AVIF. Tamaño máximo: 10 MiB.
 - `202607230008_inventory_import_and_product_images.sql`: importación idempotente, conciliación de stock, archivo privado y cambio transaccional de imagen principal.
 - `202607230009_secure_public_catalog.sql`: RPC pública de catálogo y cierre del acceso directo a códigos, costos, stock exacto, motores e imágenes.
 - `202607240010_retryable_inventory_imports.sql`: marca como fallidas las importaciones con errores y permite reintentar el mismo archivo después de corregir el problema.
+- `202607240011_fix_excel_imports_updated_at.sql`: agrega la marca de modificación requerida por el trigger del historial de importaciones.
 
 ## Separación entre ERP y catálogo público
 
