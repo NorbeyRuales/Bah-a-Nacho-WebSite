@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Search, Menu, X, ChevronDown, ChevronRight, Star, Phone, Mail, MapPin,
   Clock, Anchor, Zap, Shield, Truck, Wrench,
@@ -48,6 +48,12 @@ type AdminView =
   | 'dashboard' | 'inventory' | 'products' | 'categories' | 'brands'
   | 'suppliers' | 'clients' | 'users' | 'orders' | 'import' | 'reports' | 'audit'
   | 'notifications' | 'settings'
+
+const CategoryManagement = lazy(() =>
+  import('./features/admin/CategoryManagement').then(module => ({
+    default: module.CategoryManagement,
+  })),
+)
 
 const TESTIMONIALS = [
   { name: 'Ricardo Mendoza', role: 'Capitán de Lancha', rating: 5, comment: 'Llevo 8 años comprando en Bahía Nacho. La calidad de los repuestos es inigualable y siempre tienen lo que necesito para mis Yamaha. El servicio técnico es de primer nivel.', avatar: 'RM' },
@@ -1727,7 +1733,14 @@ function AdminPanel({
               onCatalogChanged={onCatalogChanged}
             />
           )}
-          {adminView === 'categories' && <AdminPlaceholder title="Gestión de Categorías" icon={Tag} />}
+          {adminView === 'categories' && (
+            <Suspense fallback={<AdminLoading message="Cargando gestión de categorías…" />}>
+              <CategoryManagement
+                canManage={profile.permissions.includes('products.manage')}
+                onCatalogChanged={onCatalogChanged}
+              />
+            </Suspense>
+          )}
           {adminView === 'brands' && <AdminPlaceholder title="Gestión de Marcas" icon={Award} />}
           {adminView === 'suppliers' && <AdminPlaceholder title="Gestión de Proveedores" icon={Truck} />}
           {adminView === 'clients' && <AdminPlaceholder title="Gestión de Clientes" icon={Users} />}

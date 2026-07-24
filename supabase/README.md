@@ -76,6 +76,7 @@ Formatos permitidos: JPEG, PNG, WebP y AVIF. Tamaño máximo: 10 MiB.
 - `202607240010_retryable_inventory_imports.sql`: marca como fallidas las importaciones con errores y permite reintentar el mismo archivo después de corregir el problema.
 - `202607240011_fix_excel_imports_updated_at.sql`: agrega la marca de modificación requerida por el trigger del historial de importaciones.
 - `202607240012_admin_product_management.sql`: creación y edición manual segura de productos con ajuste transaccional de inventario.
+- `202607240013_category_hierarchy_integrity.sql`: protección de integridad contra ciclos en la jerarquía de subcategorías.
 
 ## Separación entre ERP y catálogo público
 
