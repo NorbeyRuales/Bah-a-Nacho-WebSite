@@ -20,8 +20,7 @@ Todas las tablas operativas tienen Row Level Security habilitado. Los permisos s
 
 Acceso público permitido:
 
-- Productos activos y existencias disponibles mediante `product_catalog`.
-- Marcas, categorías, subcategorías, motores e imágenes activas.
+- Catálogo comercial seguro mediante `get_public_catalog()`.
 - Configuración pública del negocio.
 - Registro de consultas únicamente mediante `submit_inquiry(...)`, que valida entradas y limita solicitudes por IP.
 
@@ -74,6 +73,7 @@ Formatos permitidos: JPEG, PNG, WebP y AVIF. Tamaño máximo: 10 MiB.
 - `202607220007_fix_user_access_function_types.sql`: tipado explícito de la protección del último administrador.
 - `202607230008_inventory_import_and_product_images.sql`: importación idempotente, conciliación de stock, archivo privado y cambio transaccional de imagen principal.
 - `202607230009_secure_public_catalog.sql`: RPC pública de catálogo y cierre del acceso directo a códigos, costos, stock exacto, motores e imágenes.
+- `202607240010_retryable_inventory_imports.sql`: marca como fallidas las importaciones con errores y permite reintentar el mismo archivo después de corregir el problema.
 
 ## Separación entre ERP y catálogo público
 
@@ -83,7 +83,7 @@ No devuelve código interno, costo de compra, IVA, stock exacto, mínimos, ubica
 
 ## Importación del inventario
 
-Desde **Panel de gestión → Importar Excel**, un usuario con `imports.manage` puede cargar archivos `.xls` o `.xlsx` de máximo 5 MiB y 2.000 productos. Antes de escribir se valida la firma real del archivo, los encabezados, los códigos duplicados, los textos, los precios y el stock.
+Desde **Panel de gestión → Importar Excel**, un usuario con `imports.manage` puede cargar archivos `.xls` o `.xlsx` de máximo 5 MiB y 2.000 productos. El lector revisa todas las hojas y hasta 250 filas por hoja antes de escoger la estructura con más coincidencias. Antes de escribir se valida la firma real del archivo, los encabezados, los códigos duplicados, los textos, los precios y el stock.
 
 Mapeo del informe **Saldos de Productos**:
 
@@ -96,7 +96,7 @@ Mapeo del informe **Saldos de Productos**:
 - `Nombre Categoria` y `Marca` → catálogos normalizados.
 - `Descripcion Corta` y `DesCripcion Larga` → descripción cuando contienen datos.
 
-El campo `Valor` no se guarda como precio porque representa el valor total del inventario. La huella SHA-256 impide procesar dos veces el mismo archivo completado. El original queda en el bucket privado `inventory-imports` y cada ejecución queda registrada en `excel_imports`.
+El campo `Valor` no se guarda como precio porque representa el valor total del inventario. La huella SHA-256 impide procesar dos veces el mismo archivo completado sin errores; una ejecución con errores queda como fallida y puede reintentarse. El original queda en el bucket privado `inventory-imports` y cada ejecución queda registrada en `excel_imports`.
 
 ## Integración del panel web
 

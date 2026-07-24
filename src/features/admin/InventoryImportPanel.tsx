@@ -62,6 +62,7 @@ export function InventoryImportPanel({
   const [importing, setImporting] = useState(false)
   const [dragActive, setDragActive] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [selectedFileName, setSelectedFileName] = useState<string | null>(null)
 
   const loadHistory = useCallback(async () => {
     setHistoryLoading(true)
@@ -84,6 +85,7 @@ export function InventoryImportPanel({
     setError(null)
     setResult(null)
     setPreview(null)
+    setSelectedFileName(file.name)
 
     try {
       setPreview(await parseInventoryWorkbook(file))
@@ -91,6 +93,7 @@ export function InventoryImportPanel({
       setError(parseError instanceof Error ? parseError.message : 'No fue posible leer el archivo.')
     } finally {
       setParsing(false)
+      if (inputRef.current) inputRef.current.value = ''
     }
   }, [canImport])
 
@@ -98,6 +101,7 @@ export function InventoryImportPanel({
     setPreview(null)
     setResult(null)
     setError(null)
+    setSelectedFileName(null)
     if (inputRef.current) inputRef.current.value = ''
   }
 
@@ -186,7 +190,11 @@ export function InventoryImportPanel({
               type="file"
               accept=".xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
               className="hidden"
-              onChange={event => void selectFile(event.target.files?.[0])}
+              onChange={event => {
+                const selectedFile = event.currentTarget.files?.[0]
+                event.currentTarget.value = ''
+                void selectFile(selectedFile)
+              }}
             />
           </div>
         ) : (
@@ -265,16 +273,44 @@ export function InventoryImportPanel({
             </div>
 
             {result && (
-              <div className="rounded-xl border border-green-800 bg-green-900/20 p-4">
-                <p className="flex items-center gap-2 font-semibold text-green-400">
-                  <CheckCircle size={17} />
-                  {result.duplicate ? 'El archivo ya se había importado' : 'Importación terminada'}
+              <div className={`rounded-xl border p-4 ${
+                result.errorCount > 0
+                  ? 'border-red-800 bg-red-900/20'
+                  : 'border-green-800 bg-green-900/20'
+              }`}>
+                <p className={`flex items-center gap-2 font-semibold ${
+                  result.errorCount > 0 ? 'text-red-300' : 'text-green-400'
+                }`}>
+                  {result.errorCount > 0
+                    ? <AlertTriangle size={17} />
+                    : <CheckCircle size={17} />}
+                  {result.duplicate
+                    ? 'El archivo ya se había importado'
+                    : result.errorCount > 0
+                      ? 'La importación necesita correcciones'
+                      : 'Catálogo actualizado correctamente'}
                 </p>
                 <p className="mt-1 text-sm text-[#b7d4ff]">
                   {result.duplicate
                     ? result.message
-                    : `${result.createdCount} creados, ${result.updatedCount} actualizados y ${result.errorCount} errores de servidor.`}
+                    : `${result.createdCount} productos creados, ${result.updatedCount} actualizados y ${result.errorCount} errores. ${
+                      result.errorCount === 0 ? 'Los productos ya están disponibles en el catálogo público.' : ''
+                    }`}
                 </p>
+                {result.errors.length > 0 && (
+                  <div className="mt-3 max-h-36 overflow-auto rounded-lg border border-red-800/70">
+                    {result.errors.map((importIssue, index) => (
+                      <div
+                        key={`${importIssue.rowNumber}-${importIssue.errorCode}-${index}`}
+                        className="border-b border-red-800/40 px-3 py-2 text-xs text-red-200 last:border-0"
+                      >
+                        Fila {importIssue.rowNumber}
+                        {importIssue.productCode ? ` · Código ${importIssue.productCode}` : ''}
+                        {`: ${importIssue.message}`}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -299,7 +335,14 @@ export function InventoryImportPanel({
       {error && (
         <div className="flex items-start gap-3 rounded-xl border border-red-800 bg-red-900/20 p-4 text-sm text-red-300" role="alert">
           <AlertTriangle size={18} className="mt-0.5 shrink-0" />
-          <span>{error}</span>
+          <div>
+            {selectedFileName && (
+              <p className="mb-1 font-semibold text-red-200">
+                Archivo analizado: {selectedFileName}
+              </p>
+            )}
+            <p>{error}</p>
+          </div>
         </div>
       )}
 
