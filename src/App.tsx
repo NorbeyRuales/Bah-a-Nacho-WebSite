@@ -55,6 +55,12 @@ const CategoryManagement = lazy(() =>
   })),
 )
 
+const BrandManagement = lazy(() =>
+  import('./features/admin/BrandManagement').then(module => ({
+    default: module.BrandManagement,
+  })),
+)
+
 const TESTIMONIALS = [
   { name: 'Ricardo Mendoza', role: 'Capitán de Lancha', rating: 5, comment: 'Llevo 8 años comprando en Bahía Nacho. La calidad de los repuestos es inigualable y siempre tienen lo que necesito para mis Yamaha. El servicio técnico es de primer nivel.', avatar: 'RM' },
   { name: 'Ana Patricia Vargas', role: 'Empresaria Náutica', rating: 5, comment: 'Manejo una flota de 6 embarcaciones y Bahía Nacho es mi proveedor exclusivo. Precios competitivos, entrega rápida y asesoría técnica especializada. Los recomiendo al 100%.', avatar: 'AV' },
@@ -1786,7 +1792,14 @@ function AdminPanel({
               />
             </Suspense>
           )}
-          {activeAdminView === 'brands' && <AdminPlaceholder title="Gestión de Marcas" icon={Award} />}
+          {activeAdminView === 'brands' && (
+            <Suspense fallback={<AdminLoading message="Cargando gestión de marcas…" />}>
+              <BrandManagement
+                canManage={profile.permissions.includes('products.manage')}
+                onCatalogChanged={onCatalogChanged}
+              />
+            </Suspense>
+          )}
           {activeAdminView === 'suppliers' && <AdminPlaceholder title="Gestión de Proveedores" icon={Truck} />}
           {activeAdminView === 'clients' && <AdminPlaceholder title="Gestión de Clientes" icon={Users} />}
           {activeAdminView === 'orders' && <AdminPlaceholder title="Gestión de Órdenes" icon={ShoppingCart} />}
