@@ -967,6 +967,36 @@ const ADMIN_NAV: {
   { icon: Settings, label: 'Configuración', view: 'settings', permission: 'settings.read' },
 ]
 
+const ADMIN_VIEW_SESSION_KEY = 'bahia-nacho.admin-view'
+
+function readStoredAdminView(): AdminView {
+  if (typeof window === 'undefined') return 'dashboard'
+
+  try {
+    const storedView = window.sessionStorage.getItem(ADMIN_VIEW_SESSION_KEY)
+    return ADMIN_NAV.some(item => item.view === storedView)
+      ? storedView as AdminView
+      : 'dashboard'
+  } catch {
+    return 'dashboard'
+  }
+}
+
+function storeAdminView(view: AdminView) {
+  try {
+    window.sessionStorage.setItem(ADMIN_VIEW_SESSION_KEY, view)
+  } catch {
+    // La navegación sigue funcionando aunque el navegador bloquee el almacenamiento.
+  }
+}
+
+function getAuthorizedAdminView(view: AdminView, permissions: string[]): AdminView {
+  const requestedView = ADMIN_NAV.find(item => item.view === view)
+  if (requestedView && permissions.includes(requestedView.permission)) return view
+
+  return ADMIN_NAV.find(item => permissions.includes(item.permission))?.view ?? 'dashboard'
+}
+
 function AdminSidebar({ current, onNav, onPublic, onSignOut, permissions, collapsed, setCollapsed }: {
   current: AdminView; onNav: (v: AdminView) => void; onPublic: () => void; onSignOut: () => void
   permissions: string[]
@@ -1659,9 +1689,18 @@ function AdminPanel({
   onCatalogChanged: () => Promise<void> | void
 }) {
   const { profile, signOut } = useAuth()
-  const [adminView, setAdminView] = useState<AdminView>('dashboard')
+  const [adminView, setAdminView] = useState<AdminView>(readStoredAdminView)
   const [collapsed, setCollapsed] = useState(false)
   const [notifCount, setNotifCount] = useState(0)
+  const activeAdminView = profile
+    ? getAuthorizedAdminView(adminView, profile.permissions)
+    : adminView
+
+  const handleAdminNavigation = useCallback((nextView: AdminView) => {
+    if (!profile || getAuthorizedAdminView(nextView, profile.permissions) !== nextView) return
+    storeAdminView(nextView)
+    setAdminView(nextView)
+  }, [profile])
 
   const refreshAlertCount = useCallback(async () => {
     try {
@@ -1676,6 +1715,12 @@ function AdminPanel({
     const interval = window.setInterval(() => void refreshAlertCount(), 60_000)
     return () => window.clearInterval(interval)
   }, [refreshAlertCount])
+
+  useEffect(() => {
+    if (!profile) return
+    if (activeAdminView !== adminView) setAdminView(activeAdminView)
+    storeAdminView(activeAdminView)
+  }, [activeAdminView, adminView, profile])
 
   const handleSignOut = () => {
     void signOut().finally(onPublic)
@@ -1700,13 +1745,13 @@ function AdminPanel({
     settings: { title: 'Configuración', subtitle: 'Ajustes del sistema y preferencias' },
   }
 
-  const { title, subtitle } = adminTitles[adminView]
+  const { title, subtitle } = adminTitles[activeAdminView]
 
   return (
     <div className="min-h-screen bg-[#060d1a] flex">
-      <AdminSidebar current={adminView} onNav={setAdminView} onPublic={onPublic} onSignOut={handleSignOut} permissions={profile.permissions} collapsed={collapsed} setCollapsed={setCollapsed} />
+      <AdminSidebar current={activeAdminView} onNav={handleAdminNavigation} onPublic={onPublic} onSignOut={handleSignOut} permissions={profile.permissions} collapsed={collapsed} setCollapsed={setCollapsed} />
       <div className={`flex-1 flex flex-col min-h-screen transition-all duration-300 ${collapsed ? 'ml-16' : 'ml-56'}`}>
-        <AdminTopbar title={title} subtitle={subtitle} notifications={notifCount} profile={profile} onNotifications={() => setAdminView('notifications')} />
+        <AdminTopbar title={title} subtitle={subtitle} notifications={notifCount} profile={profile} onNotifications={() => handleAdminNavigation('notifications')} />
         <main className="flex-1 p-6 overflow-auto">
           {/* Breadcrumb */}
           <div className="flex items-center gap-2 text-xs text-[#64748b] mb-5">
@@ -1715,25 +1760,25 @@ function AdminPanel({
             <span className="text-[#93c5fd]">{title}</span>
           </div>
 
-          {adminView === 'dashboard' && <AdminDashboard onAudit={() => setAdminView('audit')} />}
-          {adminView === 'inventory' && <AdminInventory onAdd={() => setAdminView('products')} />}
-          {adminView === 'import' && (
+          {activeAdminView === 'dashboard' && <AdminDashboard onAudit={() => handleAdminNavigation('audit')} />}
+          {activeAdminView === 'inventory' && <AdminInventory onAdd={() => handleAdminNavigation('products')} />}
+          {activeAdminView === 'import' && (
             <InventoryImportPanel
               canImport={profile.permissions.includes('imports.manage')}
               onImported={onCatalogChanged}
             />
           )}
-          {adminView === 'audit' && <AdminAudit />}
-          {adminView === 'notifications' && <AdminNotifications onCountChange={setNotifCount} />}
-          {adminView === 'users' && <UserManagement currentUser={profile} />}
-          {adminView === 'products' && (
+          {activeAdminView === 'audit' && <AdminAudit />}
+          {activeAdminView === 'notifications' && <AdminNotifications onCountChange={setNotifCount} />}
+          {activeAdminView === 'users' && <UserManagement currentUser={profile} />}
+          {activeAdminView === 'products' && (
             <ProductImageManager
               canManage={profile.permissions.includes('products.manage')}
               canManageStock={profile.permissions.includes('inventory.manage')}
               onCatalogChanged={onCatalogChanged}
             />
           )}
-          {adminView === 'categories' && (
+          {activeAdminView === 'categories' && (
             <Suspense fallback={<AdminLoading message="Cargando gestión de categorías…" />}>
               <CategoryManagement
                 canManage={profile.permissions.includes('products.manage')}
@@ -1741,12 +1786,12 @@ function AdminPanel({
               />
             </Suspense>
           )}
-          {adminView === 'brands' && <AdminPlaceholder title="Gestión de Marcas" icon={Award} />}
-          {adminView === 'suppliers' && <AdminPlaceholder title="Gestión de Proveedores" icon={Truck} />}
-          {adminView === 'clients' && <AdminPlaceholder title="Gestión de Clientes" icon={Users} />}
-          {adminView === 'orders' && <AdminPlaceholder title="Gestión de Órdenes" icon={ShoppingCart} />}
-          {adminView === 'reports' && <AdminPlaceholder title="Reportes y Analítica" icon={BarChart3} />}
-          {adminView === 'settings' && <AdminPlaceholder title="Configuración del Sistema" icon={Settings} />}
+          {activeAdminView === 'brands' && <AdminPlaceholder title="Gestión de Marcas" icon={Award} />}
+          {activeAdminView === 'suppliers' && <AdminPlaceholder title="Gestión de Proveedores" icon={Truck} />}
+          {activeAdminView === 'clients' && <AdminPlaceholder title="Gestión de Clientes" icon={Users} />}
+          {activeAdminView === 'orders' && <AdminPlaceholder title="Gestión de Órdenes" icon={ShoppingCart} />}
+          {activeAdminView === 'reports' && <AdminPlaceholder title="Reportes y Analítica" icon={BarChart3} />}
+          {activeAdminView === 'settings' && <AdminPlaceholder title="Configuración del Sistema" icon={Settings} />}
         </main>
       </div>
     </div>
