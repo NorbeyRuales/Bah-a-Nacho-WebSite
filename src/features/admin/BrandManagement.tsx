@@ -32,8 +32,47 @@ import {
   type BrandInput,
   type BrandRecord,
 } from "./brandService"
+import {
+  parseBoundedString,
+  useAdminSessionState,
+} from "./useAdminSessionState"
 
 type StatusFilter = "all" | "active" | "inactive"
+
+function parseStatusFilter(value: unknown): StatusFilter | undefined {
+  return value === "all" || value === "active" || value === "inactive"
+    ? value
+    : undefined
+}
+
+function parseBrandEditor(value: unknown): BrandInput | null | undefined {
+  if (value === null) return null
+  if (!value || typeof value !== "object") return undefined
+  const editor = value as Record<string, unknown>
+  if (
+    (editor.id !== null && typeof editor.id !== "string") ||
+    typeof editor.name !== "string" ||
+    editor.name.length > 100 ||
+    typeof editor.slug !== "string" ||
+    editor.slug.length > 120 ||
+    typeof editor.description !== "string" ||
+    editor.description.length > 1_000 ||
+    typeof editor.logoUrl !== "string" ||
+    editor.logoUrl.length > 2_048 ||
+    typeof editor.isActive !== "boolean"
+  ) {
+    return undefined
+  }
+
+  return {
+    id: editor.id,
+    name: editor.name,
+    slug: editor.slug,
+    description: editor.description,
+    logoUrl: editor.logoUrl,
+    isActive: editor.isActive,
+  }
+}
 
 const inputClassName =
   "w-full rounded-lg border border-[#1e3a5f] bg-[#081426] px-3 py-2.5 text-sm text-white outline-none transition-colors placeholder:text-[#425674] focus:border-[#1565ff] disabled:cursor-not-allowed disabled:opacity-55"
@@ -380,9 +419,21 @@ export function BrandManagement({
   onCatalogChanged: () => Promise<void> | void
 }) {
   const [brands, setBrands] = useState<BrandRecord[]>([])
-  const [query, setQuery] = useState("")
-  const [status, setStatus] = useState<StatusFilter>("all")
-  const [editor, setEditor] = useState<BrandInput | null>(null)
+  const [query, setQuery] = useAdminSessionState(
+    "brands.search",
+    "",
+    parseBoundedString(120),
+  )
+  const [status, setStatus] = useAdminSessionState<StatusFilter>(
+    "brands.status",
+    "all",
+    parseStatusFilter,
+  )
+  const [editor, setEditor] = useAdminSessionState<BrandInput | null>(
+    "brands.editor",
+    null,
+    parseBrandEditor,
+  )
   const [deleteTarget, setDeleteTarget] = useState<BrandRecord | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -623,6 +674,7 @@ export function BrandManagement({
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
+                maxLength={120}
                 className={`${inputClassName} pl-9`}
                 placeholder="Buscar por nombre, slug o descripción…"
               />

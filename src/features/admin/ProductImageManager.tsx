@@ -32,6 +32,10 @@ import {
   type ProductEditorOptions,
   type ProductEditorRecord,
 } from './productManagementService'
+import {
+  parseBoundedString,
+  useAdminSessionState,
+} from './useAdminSessionState'
 
 const FALLBACK_IMAGE = '/bahia-nacho-favicon.png'
 
@@ -60,6 +64,80 @@ type ProductDraft = {
   heightCm: string
   inventoryLocationId: string
   inventoryTargetStock: string
+}
+
+const PRODUCT_DRAFT_STRING_FIELDS = [
+  'internalCode',
+  'oemCode',
+  'manufacturerCode',
+  'name',
+  'description',
+  'categoryId',
+  'subcategoryId',
+  'brandId',
+  'purchasePrice',
+  'salePrice',
+  'currencyCode',
+  'taxRate',
+  'minStock',
+  'maxStock',
+  'weightKg',
+  'lengthCm',
+  'widthCm',
+  'heightCm',
+  'inventoryLocationId',
+  'inventoryTargetStock',
+] as const
+
+function parseProductDraft(value: unknown): ProductDraft | null | undefined {
+  if (value === null) return null
+  if (!value || typeof value !== 'object') return undefined
+  const draft = value as Record<string, unknown>
+  if (
+    (draft.id !== null && typeof draft.id !== 'string')
+    || (draft.status !== 'active' && draft.status !== 'inactive' && draft.status !== 'discontinued')
+    || PRODUCT_DRAFT_STRING_FIELDS.some(
+      field => typeof draft[field] !== 'string' || (draft[field] as string).length > 5_000,
+    )
+  ) {
+    return undefined
+  }
+  return draft as ProductDraft
+}
+
+function parseInventoryProduct(value: unknown): InventoryProduct | null | undefined {
+  if (value === null) return null
+  if (!value || typeof value !== 'object') return undefined
+  const product = value as Record<string, unknown>
+  const requiredStrings = [
+    'id',
+    'internalCode',
+    'name',
+    'brandName',
+    'categoryName',
+    'currencyCode',
+    'status',
+  ]
+  const requiredNumbers = [
+    'salePrice',
+    'stock',
+    'availableStock',
+    'minStock',
+  ]
+
+  if (
+    requiredStrings.some(
+      field => typeof product[field] !== 'string' || (product[field] as string).length > 2_048,
+    )
+    || requiredNumbers.some(
+      field => typeof product[field] !== 'number' || !Number.isFinite(product[field]),
+    )
+    || (product.oemCode !== null && typeof product.oemCode !== 'string')
+    || (product.primaryImageUrl !== null && typeof product.primaryImageUrl !== 'string')
+  ) {
+    return undefined
+  }
+  return product as InventoryProduct
 }
 
 function Field({
@@ -356,14 +434,31 @@ export function ProductImageManager({
   canManageStock: boolean
   onCatalogChanged: () => Promise<void> | void
 }) {
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useAdminSessionState(
+    'products.search',
+    '',
+    parseBoundedString(80),
+  )
   const [reloadKey, setReloadKey] = useState(0)
   const [products, setProducts] = useState<InventoryProduct[]>([])
-  const [selectedProduct, setSelectedProduct] = useState<InventoryProduct | null>(null)
+  const [selectedProduct, setSelectedProduct] =
+    useAdminSessionState<InventoryProduct | null>(
+      'products.selected',
+      null,
+      parseInventoryProduct,
+    )
   const [options, setOptions] = useState<ProductEditorOptions | null>(null)
   const [record, setRecord] = useState<ProductEditorRecord | null>(null)
-  const [draft, setDraft] = useState<ProductDraft | null>(null)
-  const [tab, setTab] = useState<EditorTab>('data')
+  const [draft, setDraft] = useAdminSessionState<ProductDraft | null>(
+    'products.draft',
+    null,
+    parseProductDraft,
+  )
+  const [tab, setTab] = useAdminSessionState<EditorTab>(
+    'products.tab',
+    'data',
+    value => (value === 'data' || value === 'images' ? value : undefined),
+  )
   const [productsLoading, setProductsLoading] = useState(true)
   const [editorLoading, setEditorLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -416,6 +511,27 @@ export function ProductImageManager({
       window.clearTimeout(timer)
     }
   }, [query, reloadKey])
+
+  useEffect(() => {
+    if (!draft?.id || record?.id === draft.id) return
+    let active = true
+    setEditorLoading(true)
+
+    void getProductEditorRecord(draft.id)
+      .then(nextRecord => {
+        if (active) setRecord(nextRecord)
+      })
+      .catch(() => {
+        if (active) setError('No fue posible actualizar la ficha del producto.')
+      })
+      .finally(() => {
+        if (active) setEditorLoading(false)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [draft?.id, record?.id])
 
   const filteredSubcategories = useMemo(
     () => options?.subcategories.filter(subcategory =>
@@ -614,6 +730,7 @@ export function ProductImageManager({
               <input
                 value={query}
                 onChange={event => setQuery(event.target.value)}
+                maxLength={80}
                 placeholder="Código, nombre, referencia o marca…"
                 className="w-full rounded-lg border border-[#1e3a5f] bg-[#081426] py-2 pl-9 pr-3 text-sm text-white outline-none focus:border-[#1565ff]"
               />

@@ -37,6 +37,12 @@ import {
   type InventoryProduct,
   type InventorySort,
 } from './features/admin/adminService'
+import {
+  clearAdminSessionState,
+  parseBoundedString,
+  parseNonNegativeInteger,
+  useAdminSessionState,
+} from './features/admin/useAdminSessionState'
 
 // ─────────────────────────────────────────────
 // TYPES & DATA
@@ -1307,10 +1313,34 @@ function AdminDashboard({ onAudit }: { onAudit: () => void }) {
 // ADMIN INVENTORY
 // ─────────────────────────────────────────────
 function AdminInventory({ onAdd }: { onAdd: () => void }) {
-  const [search, setSearch] = useState('')
-  const [sortKey, setSortKey] = useState<InventorySort>('internal_code')
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
-  const [page, setPage] = useState(0)
+  const [search, setSearch] = useAdminSessionState(
+    'inventory.search',
+    '',
+    parseBoundedString(80),
+  )
+  const [sortKey, setSortKey] = useAdminSessionState<InventorySort>(
+    'inventory.sort',
+    'internal_code',
+    value =>
+      value === 'internal_code' ||
+      value === 'name' ||
+      value === 'brand_name' ||
+      value === 'category_name' ||
+      value === 'stock' ||
+      value === 'sale_price'
+        ? value
+        : undefined,
+  )
+  const [sortDir, setSortDir] = useAdminSessionState<'asc' | 'desc'>(
+    'inventory.sort-direction',
+    'asc',
+    value => (value === 'asc' || value === 'desc' ? value : undefined),
+  )
+  const [page, setPage] = useAdminSessionState(
+    'inventory.page',
+    0,
+    parseNonNegativeInteger,
+  )
   const [rows, setRows] = useState<InventoryProduct[]>([])
   const [totalCount, setTotalCount] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -1343,6 +1373,10 @@ function AdminInventory({ onAdd }: { onAdd: () => void }) {
       window.clearTimeout(timer)
     }
   }, [page, search, sortDir, sortKey])
+
+  useEffect(() => {
+    if (page > totalPages - 1) setPage(Math.max(0, totalPages - 1))
+  }, [page, setPage, totalPages])
 
   const handleSort = (k: InventorySort) => {
     if (k === sortKey) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -1389,6 +1423,7 @@ function AdminInventory({ onAdd }: { onAdd: () => void }) {
         <div className="relative flex-1 max-w-sm">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#64748b]" />
           <input type="text" value={search} onChange={e => { setSearch(e.target.value); setPage(0) }}
+            maxLength={80}
             placeholder="Buscar producto…"
             className="w-full glass border border-[#1e3a5f] focus:border-[#1565ff] bg-transparent pl-9 pr-3 py-2 text-white placeholder-[#64748b] rounded-lg text-sm outline-none" />
         </div>
@@ -1484,10 +1519,18 @@ function AdminInventory({ onAdd }: { onAdd: () => void }) {
 }
 
 function AdminAudit() {
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useAdminSessionState(
+    'audit.search',
+    '',
+    parseBoundedString(80),
+  )
   const [rows, setRows] = useState<AuditEntry[]>([])
   const [totalCount, setTotalCount] = useState(0)
-  const [page, setPage] = useState(0)
+  const [page, setPage] = useAdminSessionState(
+    'audit.page',
+    0,
+    parseNonNegativeInteger,
+  )
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const pageSize = 20
@@ -1517,6 +1560,10 @@ function AdminAudit() {
       window.clearTimeout(timer)
     }
   }, [page, search])
+
+  useEffect(() => {
+    if (page > totalPages - 1) setPage(Math.max(0, totalPages - 1))
+  }, [page, setPage, totalPages])
 
   const exportCurrentPage = () => {
     downloadCsv('auditoria-bahia-nacho.csv', [
@@ -1729,6 +1776,7 @@ function AdminPanel({
   }, [activeAdminView, adminView, profile])
 
   const handleSignOut = () => {
+    if (profile) clearAdminSessionState(profile.id)
     void signOut().finally(onPublic)
   }
 

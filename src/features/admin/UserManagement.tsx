@@ -33,11 +33,61 @@ import {
   type ManagedUserFilter,
   type ManagedUserInput,
 } from "./userService"
+import {
+  parseBoundedString,
+  parseNonNegativeInteger,
+  useAdminSessionState,
+} from "./useAdminSessionState"
 
 type Feedback = { kind: "success" | "error", text: string }
 type ConfirmAction = "archive" | "reset"
 
 const PAGE_SIZE = 20
+
+type UserEditorTarget = "new" | string | null
+
+function parseUserFilter(value: unknown): ManagedUserFilter | undefined {
+  return value === "all" ||
+    value === "active" ||
+    value === "inactive" ||
+    value === "archived"
+    ? value
+    : undefined
+}
+
+function parseEditorTarget(value: unknown): UserEditorTarget | undefined {
+  return value === null ||
+    value === "new" ||
+    (typeof value === "string" && value.length <= 100)
+    ? value
+    : undefined
+}
+
+function parseUserDraft(value: unknown): ManagedUserInput | undefined {
+  if (!value || typeof value !== "object") return undefined
+  const draft = value as Record<string, unknown>
+  if (
+    typeof draft.firstName !== "string" ||
+    draft.firstName.length > 100 ||
+    typeof draft.lastName !== "string" ||
+    draft.lastName.length > 100 ||
+    typeof draft.email !== "string" ||
+    draft.email.length > 254 ||
+    typeof draft.roleId !== "string" ||
+    draft.roleId.length > 100 ||
+    (draft.status !== "active" && draft.status !== "inactive")
+  ) {
+    return undefined
+  }
+
+  return {
+    firstName: draft.firstName,
+    lastName: draft.lastName,
+    email: draft.email,
+    roleId: draft.roleId,
+    status: draft.status,
+  }
+}
 
 function formatDate(value: string | null) {
   if (!value) return "Nunca"
@@ -124,26 +174,45 @@ function UserFormDialog({
   user,
   roles,
   currentUserId,
+  draftKey,
   onClose,
   onSaved,
 }: {
   user: ManagedUser | null
   roles: ManagedRole[]
   currentUserId: string
+  draftKey: string
   onClose: () => void
   onSaved: (feedback: Feedback, updatedCurrentUser: boolean) => void
 }) {
   const isEditing = user !== null
   const isCurrentUser = user?.id === currentUserId
-  const [form, setForm] = useState<ManagedUserInput>({
+  const initialForm: ManagedUserInput = {
     firstName: user?.firstName ?? "",
     lastName: user?.lastName ?? "",
     email: user?.email ?? "",
     roleId: user?.role.id ?? roles[0]?.id ?? "",
     status: user?.status ?? "active",
-  })
+  }
+  const [form, setForm, clearForm] = useAdminSessionState(
+    draftKey,
+    initialForm,
+    parseUserDraft,
+  )
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!form.roleId && roles[0]) {
+      setForm((current) => ({ ...current, roleId: roles[0].id }))
+    }
+  }, [form.roleId, roles, setForm])
+
+  const close = () => {
+    if (saving) return
+    clearForm()
+    onClose()
+  }
 
   const setField = <K extends keyof ManagedUserInput,>(
     field: K,
@@ -163,6 +232,7 @@ function UserFormDialog({
       const result = user
         ? await updateUser(user.id, form)
         : await inviteUser(form)
+      clearForm()
       onSaved({ kind: "success", text: result.message }, Boolean(isCurrentUser))
     } catch (submitError) {
       setError(
@@ -187,7 +257,7 @@ function UserFormDialog({
           ? "Actualiza la identidad, el rol y el acceso de la cuenta."
           : "Se enviará una invitación segura para que el usuario defina su contraseña."
       }
-      onClose={saving ? () => undefined : onClose}
+      onClose={saving ? () => undefined : close}
     >
       <form onSubmit={submit}>
         <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -278,7 +348,7 @@ function UserFormDialog({
         <div className="flex justify-end gap-3 px-5 py-4 bg-[#081426]/70 border-t border-[#1e3a5f]">
           <button
             type="button"
-            onClick={onClose}
+            onClick={close}
             disabled={saving}
             className="px-4 py-2 text-sm text-[#93c5fd] hover:text-white rounded-lg hover:bg-white/5 disabled:opacity-50"
           >
@@ -420,17 +490,39 @@ export function UserManagement({ currentUser }: { currentUser: UserProfile }) {
   const { refreshProfile } = useAuth()
   const [users, setUsers] = useState<ManagedUser[]>([])
   const [roles, setRoles] = useState<ManagedRole[]>([])
-  const [search, setSearch] = useState("")
-  const [statusFilter, setStatusFilter] = useState<ManagedUserFilter>("all")
-  const [roleFilter, setRoleFilter] = useState("")
-  const [page, setPage] = useState(0)
+  const [search, setSearch] = useAdminSessionState(
+    "users.search",
+    "",
+    parseBoundedString(80),
+  )
+  const [statusFilter, setStatusFilter] =
+    useAdminSessionState<ManagedUserFilter>(
+      "users.status",
+      "all",
+      parseUserFilter,
+    )
+  const [roleFilter, setRoleFilter] = useAdminSessionState(
+    "users.role",
+    "",
+    parseBoundedString(100),
+  )
+  const [page, setPage] = useAdminSessionState(
+    "users.page",
+    0,
+    parseNonNegativeInteger,
+  )
+  const [editorTarget, setEditorTarget] =
+    useAdminSessionState<UserEditorTarget>(
+      "users.editor",
+      null,
+      parseEditorTarget,
+    )
   const [count, setCount] = useState(0)
   const [reloadKey, setReloadKey] = useState(0)
   const [loading, setLoading] = useState(true)
   const [rolesLoading, setRolesLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [feedback, setFeedback] = useState<Feedback | null>(null)
-  const [formUser, setFormUser] = useState<ManagedUser | "new" | null>(null)
   const [confirmState, setConfirmState] = useState<{
     user: ManagedUser
     action: ConfirmAction
@@ -438,6 +530,10 @@ export function UserManagement({ currentUser }: { currentUser: UserProfile }) {
   const [restoringId, setRestoringId] = useState<string | null>(null)
   const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE))
   const canManage = currentUser.permissions.includes("users.manage")
+  const editedUser =
+    typeof editorTarget === "string" && editorTarget !== "new"
+      ? users.find((user) => user.id === editorTarget) ?? null
+      : null
 
   useEffect(() => {
     let active = true
@@ -513,7 +609,7 @@ export function UserManagement({ currentUser }: { currentUser: UserProfile }) {
   }
 
   const handleSaved = (nextFeedback: Feedback, updatedCurrentUser: boolean) => {
-    setFormUser(null)
+    setEditorTarget(null)
     setFeedback(nextFeedback)
     setReloadKey((value) => value + 1)
     if (updatedCurrentUser) void refreshProfile()
@@ -632,7 +728,7 @@ export function UserManagement({ currentUser }: { currentUser: UserProfile }) {
           {canManage && (
             <button
               type="button"
-              onClick={() => setFormUser("new")}
+              onClick={() => setEditorTarget("new")}
               disabled={rolesLoading || roles.length === 0}
               className="inline-flex items-center justify-center gap-2 bg-[#1565ff] hover:bg-[#1252d3] disabled:opacity-50 px-4 py-2.5 rounded-lg text-sm text-white"
             >
@@ -798,7 +894,7 @@ export function UserManagement({ currentUser }: { currentUser: UserProfile }) {
                               <>
                                 <button
                                   type="button"
-                                  onClick={() => setFormUser(user)}
+                                  onClick={() => setEditorTarget(user.id)}
                                   title="Editar usuario"
                                   aria-label={`Editar a ${user.email}`}
                                   className="p-2 rounded-lg text-[#93c5fd] hover:text-white hover:bg-white/5"
@@ -887,12 +983,14 @@ export function UserManagement({ currentUser }: { currentUser: UserProfile }) {
         último administrador activo están protegidos.
       </div>
 
-      {formUser && (
+      {(editorTarget === "new" || editedUser) && (
         <UserFormDialog
-          user={formUser === "new" ? null : formUser}
+          key={editorTarget}
+          user={editorTarget === "new" ? null : editedUser}
           roles={roles}
           currentUserId={currentUser.id}
-          onClose={() => setFormUser(null)}
+          draftKey={`users.draft.${editorTarget}`}
+          onClose={() => setEditorTarget(null)}
           onSaved={handleSaved}
         />
       )}

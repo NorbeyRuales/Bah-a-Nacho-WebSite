@@ -37,6 +37,10 @@ import {
   type SubcategoryInput,
   type SubcategoryRecord,
 } from "./categoryService"
+import {
+  parseBoundedString,
+  useAdminSessionState,
+} from "./useAdminSessionState"
 
 type StatusFilter = "all" | "active" | "inactive"
 type EditorState = { kind: "category"; value: CategoryInput } | {
@@ -48,6 +52,74 @@ type DeleteTarget = { kind: "category"; id: string; name: string } | {
   id: string
   name: string
 } | null
+
+function parseStatusFilter(value: unknown): StatusFilter | undefined {
+  return value === "all" || value === "active" || value === "inactive"
+    ? value
+    : undefined
+}
+
+function parseCategoryInput(value: unknown): CategoryInput | undefined {
+  if (!value || typeof value !== "object") return undefined
+  const input = value as Record<string, unknown>
+  if (
+    (input.id !== null && typeof input.id !== "string") ||
+    typeof input.name !== "string" ||
+    input.name.length > 120 ||
+    typeof input.slug !== "string" ||
+    input.slug.length > 120 ||
+    typeof input.description !== "string" ||
+    input.description.length > 1_000 ||
+    typeof input.sortOrder !== "number" ||
+    !Number.isSafeInteger(input.sortOrder) ||
+    input.sortOrder < 0 ||
+    input.sortOrder > 999_999 ||
+    typeof input.isActive !== "boolean"
+  ) {
+    return undefined
+  }
+
+  return {
+    id: input.id,
+    name: input.name,
+    slug: input.slug,
+    description: input.description,
+    sortOrder: input.sortOrder,
+    isActive: input.isActive,
+  }
+}
+
+function parseCategoryEditor(value: unknown): EditorState | undefined {
+  if (value === null) return null
+  if (!value || typeof value !== "object") return undefined
+  const editor = value as Record<string, unknown>
+  const common = parseCategoryInput(editor.value)
+  if (!common) return undefined
+
+  if (editor.kind === "category") {
+    return { kind: "category", value: common }
+  }
+
+  if (editor.kind !== "subcategory" || !editor.value) return undefined
+  const subcategory = editor.value as Record<string, unknown>
+  if (
+    typeof subcategory.categoryId !== "string" ||
+    subcategory.categoryId.length > 100 ||
+    (subcategory.parentId !== null &&
+      typeof subcategory.parentId !== "string")
+  ) {
+    return undefined
+  }
+
+  return {
+    kind: "subcategory",
+    value: {
+      ...common,
+      categoryId: subcategory.categoryId,
+      parentId: subcategory.parentId,
+    },
+  }
+}
 
 const inputClassName =
   "w-full rounded-lg border border-[#1e3a5f] bg-[#081426] px-3 py-2.5 text-sm text-white outline-none transition-colors placeholder:text-[#425674] focus:border-[#1565ff] disabled:cursor-not-allowed disabled:opacity-55"
@@ -481,10 +553,22 @@ export function CategoryManagement({
 }) {
   const [categories, setCategories] = useState<CategoryRecord[]>([])
   const [subcategories, setSubcategories] = useState<SubcategoryRecord[]>([])
-  const [query, setQuery] = useState("")
-  const [status, setStatus] = useState<StatusFilter>("all")
+  const [query, setQuery] = useAdminSessionState(
+    "categories.search",
+    "",
+    parseBoundedString(120),
+  )
+  const [status, setStatus] = useAdminSessionState<StatusFilter>(
+    "categories.status",
+    "all",
+    parseStatusFilter,
+  )
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
-  const [editor, setEditor] = useState<EditorState>(null)
+  const [editor, setEditor] = useAdminSessionState<EditorState>(
+    "categories.editor",
+    null,
+    parseCategoryEditor,
+  )
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -778,6 +862,7 @@ export function CategoryManagement({
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
+                maxLength={120}
                 className={`${inputClassName} pl-9`}
                 placeholder="Buscar por nombre, slug o subcategoría…"
               />
