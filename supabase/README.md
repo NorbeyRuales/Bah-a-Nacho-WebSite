@@ -72,6 +72,24 @@ Formatos permitidos: JPEG, PNG, WebP y AVIF. Tamaño máximo: 10 MiB.
 - `202607220005_admin_dashboard_api.sql`: KPIs y alertas de inventario agregados en PostgreSQL para evitar consultas masivas desde el navegador.
 - `202607220006_unified_user_access.sql`: rol Cliente, vínculo autenticado, permisos actuales, portal privado y administración segura de rol/estado.
 - `202607220007_fix_user_access_function_types.sql`: tipado explícito de la protección del último administrador.
+- `202607230008_inventory_import_and_product_images.sql`: importación idempotente, conciliación de stock, archivo privado y cambio transaccional de imagen principal.
+
+## Importación del inventario
+
+Desde **Panel de gestión → Importar Excel**, un usuario con `imports.manage` puede cargar archivos `.xls` o `.xlsx` de máximo 5 MiB y 2.000 productos. Antes de escribir se valida la firma real del archivo, los encabezados, los códigos duplicados, los textos, los precios y el stock.
+
+Mapeo del informe **Saldos de Productos**:
+
+- `Codigo` → código interno y clave de actualización.
+- `Referencia` → código OEM.
+- `Nombre Producto` → nombre.
+- `Cantidad` → stock objetivo; la diferencia se registra como movimiento de ajuste.
+- `Ult. Val. Compra` → precio de compra.
+- `PrecioMedio` → precio de venta en COP.
+- `Nombre Categoria` y `Marca` → catálogos normalizados.
+- `Descripcion Corta` y `DesCripcion Larga` → descripción cuando contienen datos.
+
+El campo `Valor` no se guarda como precio porque representa el valor total del inventario. La huella SHA-256 impide procesar dos veces el mismo archivo completado. El original queda en el bucket privado `inventory-imports` y cada ejecución queda registrada en `excel_imports`.
 
 ## Integración del panel web
 
@@ -84,7 +102,7 @@ VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_replace_me
 
 También acepta temporalmente `VITE_SUPABASE_ANON_KEY` para proyectos que todavía utilizan la clave pública heredada. La sesión se conserva y renueva mediante Supabase Auth; RLS sigue validando todas las consultas del panel y del portal del cliente.
 
-El acceso se realiza desde **Iniciar sesión** con el correo y contraseña creados en Supabase Authentication. Hay un único formulario: los clientes llegan a su portal privado y los roles internos al panel de gestión. Dashboard, inventario, usuarios, auditoría, historial de importaciones y alertas consultan datos reales.
+El acceso se realiza desde **Iniciar sesión** con el correo y contraseña creados en Supabase Authentication. Hay un único formulario: los clientes llegan a su portal privado y los roles internos al panel de gestión. Dashboard, inventario, catálogo público, imágenes, usuarios, auditoría, importaciones y alertas consultan datos reales.
 
 Para revisar migraciones pendientes sin aplicarlas:
 

@@ -18,16 +18,17 @@ import { LoginPage } from './features/auth/LoginPage'
 import { useAuth, type UserProfile } from './features/auth/AuthProvider'
 import { CustomerPortal } from './features/customer/CustomerPortal'
 import { UserManagement } from './features/admin/UserManagement'
+import { InventoryImportPanel } from './features/admin/InventoryImportPanel'
+import { ProductImageManager } from './features/admin/ProductImageManager'
+import { getPublicCatalog, type CatalogProduct } from './features/catalog/catalogService'
 import {
   getAuditPage,
   getDashboardSnapshot,
-  getImportHistory,
   getInventoryAlerts,
   getInventoryExport,
   getInventoryPage,
   type AuditEntry,
   type DashboardSnapshot,
-  type ImportHistoryEntry,
   type InventoryAlert,
   type InventoryProduct,
   type InventorySort,
@@ -36,143 +37,13 @@ import {
 // ─────────────────────────────────────────────
 // TYPES & DATA
 // ─────────────────────────────────────────────
-type Product = {
-  id: string
-  code: string
-  oemCode: string
-  name: string
-  category: string
-  brand: string
-  compatibility: string[]
-  price: number
-  stock: number
-  minStock: number
-  image: string
-  images: string[]
-  description: string
-  specs: Record<string, string>
-  available: boolean
-  featured: boolean
-  weight: string
-  location: string
-}
+type Product = CatalogProduct
 
 type View = 'home' | 'catalog' | 'product' | 'account'
 type AdminView =
   | 'dashboard' | 'inventory' | 'products' | 'categories' | 'brands'
   | 'suppliers' | 'clients' | 'users' | 'orders' | 'import' | 'reports' | 'audit'
   | 'notifications' | 'settings'
-
-const BRANDS = ['Yamaha', 'Mercury', 'Suzuki', 'Honda', 'Tohatsu', 'Evinrude', 'Johnson', 'BRP']
-const CATEGORIES = ['Repuestos de Motor', 'Hélices', 'Sistemas de Combustible', 'Refrigeración', 'Eléctrico', 'Accesorios', 'Motores Completos', 'Lubricantes']
-
-const PRODUCTS: Product[] = [
-  {
-    id: '1', code: 'BN-001', oemCode: '6H3-44352-00-00',
-    name: 'Impeller Kit de Agua - Yamaha 40-60 HP',
-    category: 'Refrigeración', brand: 'Yamaha',
-    compatibility: ['Yamaha 40 HP', 'Yamaha 50 HP', 'Yamaha 60 HP', 'Yamaha 70 HP'],
-    price: 48.50, stock: 32, minStock: 5,
-    image: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&h=300&fit=crop&auto=format',
-    images: [
-      'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=800&h=600&fit=crop&auto=format',
-      'https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=800&h=600&fit=crop&auto=format',
-    ],
-    description: 'Kit completo de impeller para bomba de agua. Fabricado con caucho de alta calidad resistente al agua salada. Incluye impeller, plato de desgaste, junta y plato de aletas.',
-    specs: { Material: 'Caucho EPDM', Diámetro: '65mm', Aletas: '6', Temperatura: '-40°C a 120°C' },
-    available: true, featured: true, weight: '0.35 kg', location: 'A-12-3',
-  },
-  {
-    id: '2', code: 'BN-002', oemCode: '8M0100526',
-    name: 'Hélice Acero Inox Mercury 13.5x17 - 3 Palas',
-    category: 'Hélices', brand: 'Mercury',
-    compatibility: ['Mercury 75 HP', 'Mercury 90 HP', 'Mercury 115 HP'],
-    price: 285.00, stock: 8, minStock: 3,
-    image: 'https://images.unsplash.com/photo-1565043666747-69f6646db940?w=400&h=300&fit=crop&auto=format',
-    images: [
-      'https://images.unsplash.com/photo-1565043666747-69f6646db940?w=800&h=600&fit=crop&auto=format',
-    ],
-    description: 'Hélice de acero inoxidable de 3 palas, diseño cupping para máximo rendimiento. Acabado pulido de alta precisión. Reduce la cavitación y mejora la aceleración.',
-    specs: { Material: 'Acero Inox 316', Diámetro: '13.5"', Paso: '17"', Palas: '3', Buje: 'Estándar' },
-    available: true, featured: true, weight: '2.8 kg', location: 'B-05-1',
-  },
-  {
-    id: '3', code: 'BN-003', oemCode: '65W-14301-00-00',
-    name: 'Carburador Completo Yamaha 25-30 HP',
-    category: 'Sistemas de Combustible', brand: 'Yamaha',
-    compatibility: ['Yamaha 25 HP', 'Yamaha 30 HP', 'Yamaha 25 HP 2T'],
-    price: 132.00, stock: 4, minStock: 5,
-    image: 'https://images.unsplash.com/photo-1489824904134-891ab64532f1?w=400&h=300&fit=crop&auto=format',
-    images: [
-      'https://images.unsplash.com/photo-1489824904134-891ab64532f1?w=800&h=600&fit=crop&auto=format',
-    ],
-    description: 'Carburador original de reemplazo con todos los jets y juntas incluidos. Compatible con motores fuera de borda Yamaha de 2 tiempos. Garantiza mezcla óptima de combustible.',
-    specs: { Tipo: '2 Tiempos', Jets: 'Incluidos', Juntas: 'Incluidas', Garantía: '12 meses' },
-    available: true, featured: false, weight: '1.2 kg', location: 'C-08-2',
-  },
-  {
-    id: '4', code: 'BN-004', oemCode: 'DF-15-FuelPump',
-    name: 'Bomba de Combustible Suzuki DF15A-DF20A',
-    category: 'Sistemas de Combustible', brand: 'Suzuki',
-    compatibility: ['Suzuki DF15A', 'Suzuki DF20A'],
-    price: 74.00, stock: 12, minStock: 5,
-    image: 'https://images.unsplash.com/photo-1609765948700-5acad1e09f03?w=400&h=300&fit=crop&auto=format',
-    images: [],
-    description: 'Bomba de combustible de alta calidad para motores Suzuki 4 tiempos. Fabricada con materiales resistentes a la gasolina y al ambiente marino salino.',
-    specs: { Caudal: '24 L/h', Presión: '0.35 bar', Voltaje: '12V DC', Corriente: '2.5A' },
-    available: true, featured: false, weight: '0.45 kg', location: 'C-04-7',
-  },
-  {
-    id: '5', code: 'BN-005', oemCode: 'HON-BF50-PROP',
-    name: 'Hélice Aluminio Honda BF50 14x19 - 3 Palas',
-    category: 'Hélices', brand: 'Honda',
-    compatibility: ['Honda BF40', 'Honda BF50', 'Honda BF60'],
-    price: 145.00, stock: 6, minStock: 3,
-    image: 'https://images.unsplash.com/photo-1598300056393-4aac492f4344?w=400&h=300&fit=crop&auto=format',
-    images: [],
-    description: 'Hélice de aluminio de alta resistencia. Diseño optimizado para motores Honda de mediana potencia. Excelente relación calidad-precio.',
-    specs: { Material: 'Aluminio A356', Diámetro: '14"', Paso: '19"', Palas: '3' },
-    available: true, featured: true, weight: '1.9 kg', location: 'B-06-4',
-  },
-  {
-    id: '6', code: 'BN-006', oemCode: 'TOH-M18-STARTERKIT',
-    name: 'Kit Arranque Eléctrico Tohatsu MFS 9.9-18 HP',
-    category: 'Eléctrico', brand: 'Tohatsu',
-    compatibility: ['Tohatsu MFS9.9', 'Tohatsu MFS15', 'Tohatsu MFS18'],
-    price: 218.00, stock: 0, minStock: 2,
-    image: 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=400&h=300&fit=crop&auto=format',
-    images: [],
-    description: 'Kit completo de arranque eléctrico para conversión de motores con arranque manual. Incluye motor de arranque, bobina de carga, regulador de voltaje y cableado.',
-    specs: { Voltaje: '12V', Potencia: '0.8 kW', Incluye: 'Motor + Bobina + Regulador' },
-    available: false, featured: false, weight: '3.2 kg', location: 'D-02-1',
-  },
-  {
-    id: '7', code: 'BN-007', oemCode: 'YAM-F150-COMPLETE',
-    name: 'Motor Yamaha F150 AETX 150 HP 4T Completo',
-    category: 'Motores Completos', brand: 'Yamaha',
-    compatibility: ['Universal - Mástil 20"', 'Universal - Mástil 25"'],
-    price: 14800.00, stock: 2, minStock: 1,
-    image: 'https://images.unsplash.com/photo-1562603812-0e07164a2959?w=400&h=300&fit=crop&auto=format',
-    images: [
-      'https://images.unsplash.com/photo-1562603812-0e07164a2959?w=800&h=600&fit=crop&auto=format',
-    ],
-    description: 'Motor fuera de borda Yamaha F150 AETX de 4 tiempos. El estándar de la industria en confiabilidad y rendimiento. Incluye mando a distancia, cables de control y acelerador.',
-    specs: { Tipo: '4 Tiempos', HP: '150', Cilindros: '4 en línea', Desplazamiento: '2670cc', Peso: '222 kg', Arranque: 'Eléctrico' },
-    available: true, featured: true, weight: '222 kg', location: 'E-01-1',
-  },
-  {
-    id: '8', code: 'BN-008', oemCode: 'MER-TRIM-TAB-16',
-    name: 'Ánodo de Zinc Mercury/Mercruiser - Kit Completo',
-    category: 'Accesorios', brand: 'Mercury',
-    compatibility: ['Mercury 40-300 HP', 'Mercruiser Alpha', 'Mercruiser Bravo'],
-    price: 38.00, stock: 45, minStock: 10,
-    image: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=400&h=300&fit=crop&auto=format',
-    images: [],
-    description: 'Kit completo de ánodos de zinc para protección catódica. Protege contra corrosión electrolítica en ambientes marinos. Recomendado para agua salada y salobre.',
-    specs: { Material: 'Zinc de Alta Pureza', Piezas: '4 ánodos', Ambientes: 'Agua salada/salobre' },
-    available: true, featured: false, weight: '0.8 kg', location: 'F-11-5',
-  },
-]
 
 const TESTIMONIALS = [
   { name: 'Ricardo Mendoza', role: 'Capitán de Lancha', rating: 5, comment: 'Llevo 8 años comprando en Bahía Nacho. La calidad de los repuestos es inigualable y siempre tienen lo que necesito para mis Yamaha. El servicio técnico es de primer nivel.', avatar: 'RM' },
@@ -204,8 +75,8 @@ const PIE_COLORS = ['#1565ff', '#00b4d8', '#0ea5e9', '#38bdf8', '#7dd3fc']
 // ─────────────────────────────────────────────
 // SHARED UTILITIES
 // ─────────────────────────────────────────────
-function formatPrice(price: number) {
-  return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(price)
+function formatPrice(price: number, currency = 'COP') {
+  return new Intl.NumberFormat('es-CO', { style: 'currency', currency, maximumFractionDigits: 0 }).format(price)
 }
 
 function WhatsAppBtn({ text, small }: { text: string; small?: boolean }) {
@@ -429,7 +300,7 @@ function ProductCard({ product, onDetail }: { product: Product; onDetail: (p: Pr
           src={product.image}
           alt={product.name}
           className="w-full h-full object-cover"
-          onError={e => { (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&h=300&fit=crop' }}
+          onError={e => { (e.target as HTMLImageElement).src = '/bahia-nacho-favicon.png' }}
         />
         <div className="absolute inset-0 bg-gradient-to-t from-[#060d1a]/60 to-transparent" />
         <div className="absolute top-3 left-3">
@@ -448,11 +319,13 @@ function ProductCard({ product, onDetail }: { product: Product; onDetail: (p: Pr
           <span className="bg-[#0a2a5e] text-[#93c5fd] text-xs px-2 py-0.5 rounded-full">{product.brand}</span>
           <span className="bg-[#0a2a5e] text-[#93c5fd] text-xs px-2 py-0.5 rounded-full">{product.category}</span>
         </div>
-        <div className="text-xs text-[#64748b] mb-3 line-clamp-1">
-          Compatible: {product.compatibility.slice(0, 2).join(', ')}{product.compatibility.length > 2 && ' +más'}
-        </div>
+        {product.compatibility.length > 0 && (
+          <div className="text-xs text-[#64748b] mb-3 line-clamp-1">
+            Compatible: {product.compatibility.slice(0, 2).join(', ')}{product.compatibility.length > 2 && ' +más'}
+          </div>
+        )}
         <div className="flex items-center justify-between">
-          <span className="font-display text-xl font-bold text-white">{formatPrice(product.price)}</span>
+          <span className="font-display text-xl font-bold text-white">{formatPrice(product.price, product.currencyCode)}</span>
           <WhatsAppBtn text={`Hola, me interesa el producto: ${product.name} (${product.code})`} small />
         </div>
       </div>
@@ -463,22 +336,50 @@ function ProductCard({ product, onDetail }: { product: Product; onDetail: (p: Pr
 // ─────────────────────────────────────────────
 // CATALOG PAGE
 // ─────────────────────────────────────────────
-function CatalogPage({ onDetail, initialQuery }: { onDetail: (p: Product) => void; initialQuery: string }) {
+function CatalogPage({
+  products,
+  loading,
+  error,
+  onRetry,
+  onDetail,
+  initialQuery,
+}: {
+  products: Product[]
+  loading: boolean
+  error: string | null
+  onRetry: () => void
+  onDetail: (p: Product) => void
+  initialQuery: string
+}) {
   const [query, setQuery] = useState(initialQuery)
   const [selectedBrands, setSelectedBrands] = useState<string[]>([])
   const [selectedCats, setSelectedCats] = useState<string[]>([])
   const [availability, setAvailability] = useState<'all' | 'available' | 'low'>('all')
-  const [priceMax, setPriceMax] = useState(20000)
+  const [priceMax, setPriceMax] = useState<number | null>(null)
   const [showFilters, setShowFilters] = useState(true)
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
 
-  const filtered = PRODUCTS.filter(p => {
+  const brands = useMemo(
+    () => Array.from(new Set(products.map(product => product.brand))).sort((a, b) => a.localeCompare(b, 'es')),
+    [products],
+  )
+  const categories = useMemo(
+    () => Array.from(new Set(products.map(product => product.category))).sort((a, b) => a.localeCompare(b, 'es')),
+    [products],
+  )
+  const catalogMaxPrice = useMemo(
+    () => Math.max(1, ...products.map(product => Math.ceil(product.price))),
+    [products],
+  )
+  const effectivePriceMax = priceMax ?? catalogMaxPrice
+
+  const filtered = products.filter(p => {
     const q = query.toLowerCase()
     const matchQ = !q || p.name.toLowerCase().includes(q) || p.code.toLowerCase().includes(q) || p.oemCode.toLowerCase().includes(q) || p.brand.toLowerCase().includes(q) || p.compatibility.some(c => c.toLowerCase().includes(q))
     const matchBrand = selectedBrands.length === 0 || selectedBrands.includes(p.brand)
     const matchCat = selectedCats.length === 0 || selectedCats.includes(p.category)
     const matchAvail = availability === 'all' || (availability === 'available' && p.stock > 0) || (availability === 'low' && p.stock <= p.minStock && p.stock > 0)
-    const matchPrice = p.price <= priceMax
+    const matchPrice = p.price <= effectivePriceMax
     return matchQ && matchBrand && matchCat && matchAvail && matchPrice
   })
 
@@ -523,7 +424,7 @@ function CatalogPage({ onDetail, initialQuery }: { onDetail: (p: Product) => voi
               <div className="glass border border-[#1e3a5f] rounded-xl p-4">
                 <h3 className="font-semibold text-white text-sm mb-3 flex items-center gap-2"><Filter size={14} /> Marca</h3>
                 <div className="space-y-2">
-                  {BRANDS.map(b => (
+                  {brands.map(b => (
                     <label key={b} className="flex items-center gap-2 cursor-pointer group">
                       <input type="checkbox" checked={selectedBrands.includes(b)} onChange={() => toggleBrand(b)} className="accent-[#1565ff]" />
                       <span className="text-sm text-[#93c5fd] group-hover:text-white transition-colors">{b}</span>
@@ -535,7 +436,7 @@ function CatalogPage({ onDetail, initialQuery }: { onDetail: (p: Product) => voi
               <div className="glass border border-[#1e3a5f] rounded-xl p-4">
                 <h3 className="font-semibold text-white text-sm mb-3">Categoría</h3>
                 <div className="space-y-2">
-                  {CATEGORIES.map(c => (
+                  {categories.map(c => (
                     <label key={c} className="flex items-center gap-2 cursor-pointer group">
                       <input type="checkbox" checked={selectedCats.includes(c)} onChange={() => toggleCat(c)} className="accent-[#1565ff]" />
                       <span className="text-xs text-[#93c5fd] group-hover:text-white transition-colors">{c}</span>
@@ -558,11 +459,19 @@ function CatalogPage({ onDetail, initialQuery }: { onDetail: (p: Product) => voi
 
               <div className="glass border border-[#1e3a5f] rounded-xl p-4">
                 <h3 className="font-semibold text-white text-sm mb-3">Precio máximo</h3>
-                <input type="range" min={0} max={20000} step={100} value={priceMax} onChange={e => setPriceMax(+e.target.value)} className="w-full accent-[#1565ff]" />
-                <div className="text-[#00b4d8] text-sm mt-1 font-mono">{formatPrice(priceMax)}</div>
+                <input
+                  type="range"
+                  min={0}
+                  max={catalogMaxPrice}
+                  step={Math.max(1, Math.ceil(catalogMaxPrice / 200))}
+                  value={effectivePriceMax}
+                  onChange={e => setPriceMax(+e.target.value)}
+                  className="w-full accent-[#1565ff]"
+                />
+                <div className="text-[#00b4d8] text-sm mt-1 font-mono">{formatPrice(effectivePriceMax)}</div>
               </div>
 
-              <button onClick={() => { setSelectedBrands([]); setSelectedCats([]); setAvailability('all'); setPriceMax(20000) }}
+              <button onClick={() => { setSelectedBrands([]); setSelectedCats([]); setAvailability('all'); setPriceMax(null) }}
                 className="w-full text-center text-sm text-[#64748b] hover:text-[#1565ff] transition-colors">
                 Limpiar filtros
               </button>
@@ -571,7 +480,11 @@ function CatalogPage({ onDetail, initialQuery }: { onDetail: (p: Product) => voi
 
           {/* Products grid */}
           <div className="flex-1">
-            {filtered.length === 0 ? (
+            {loading ? (
+              <AdminLoading message="Cargando catálogo…" />
+            ) : error ? (
+              <AdminError message={error} onRetry={onRetry} />
+            ) : filtered.length === 0 ? (
               <div className="text-center py-20 text-[#64748b]">
                 <Package size={48} className="mx-auto mb-4 opacity-30" />
                 <p className="text-lg">No se encontraron productos</p>
@@ -597,18 +510,18 @@ function ProductListRow({ product, onDetail }: { product: Product; onDetail: (p:
   return (
     <div onClick={() => onDetail(product)} className="product-card glass border border-[#1e3a5f] rounded-xl p-4 flex gap-4 cursor-pointer">
       <img src={product.image} alt={product.name} className="w-20 h-20 object-cover rounded-lg flex-shrink-0 bg-[#0a1628]"
-        onError={e => { (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=80&h=80&fit=crop' }} />
+        onError={e => { (e.target as HTMLImageElement).src = '/bahia-nacho-favicon.png' }} />
       <div className="flex-1 min-w-0">
         <div className="font-mono text-xs text-[#64748b] mb-0.5">{product.code} · {product.oemCode}</div>
         <h3 className="font-semibold text-white text-sm mb-1">{product.name}</h3>
         <div className="flex items-center gap-2 flex-wrap">
           <span className="bg-[#0a2a5e] text-[#93c5fd] text-xs px-2 py-0.5 rounded-full">{product.brand}</span>
           <StockBadge stock={product.stock} min={product.minStock} />
-          <span className="text-[#64748b] text-xs">{product.compatibility.slice(0, 2).join(', ')}</span>
+          {product.compatibility.length > 0 && <span className="text-[#64748b] text-xs">{product.compatibility.slice(0, 2).join(', ')}</span>}
         </div>
       </div>
       <div className="flex flex-col items-end justify-between flex-shrink-0">
-        <span className="font-display text-xl font-bold text-white">{formatPrice(product.price)}</span>
+        <span className="font-display text-xl font-bold text-white">{formatPrice(product.price, product.currencyCode)}</span>
         <WhatsAppBtn text={`Consulta: ${product.name} (${product.code})`} small />
       </div>
     </div>
@@ -618,7 +531,17 @@ function ProductListRow({ product, onDetail }: { product: Product; onDetail: (p:
 // ─────────────────────────────────────────────
 // PRODUCT DETAIL PAGE
 // ─────────────────────────────────────────────
-function ProductDetailPage({ product, onBack }: { product: Product; onBack: () => void }) {
+function ProductDetailPage({
+  product,
+  products,
+  onBack,
+  onDetail,
+}: {
+  product: Product
+  products: Product[]
+  onBack: () => void
+  onDetail: (product: Product) => void
+}) {
   const [activeImg, setActiveImg] = useState(0)
   const allImgs = [product.image, ...product.images].filter((v, i, arr) => arr.indexOf(v) === i)
 
@@ -634,7 +557,7 @@ function ProductDetailPage({ product, onBack }: { product: Product; onBack: () =
           <div>
             <div className="glass border border-[#1e3a5f] rounded-2xl overflow-hidden h-80 mb-3">
               <img src={allImgs[activeImg]} alt={product.name} className="w-full h-full object-cover bg-[#0a1628]"
-                onError={e => { (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=800&h=600&fit=crop' }} />
+                onError={e => { (e.target as HTMLImageElement).src = '/bahia-nacho-favicon.png' }} />
             </div>
             {allImgs.length > 1 && (
               <div className="flex gap-2">
@@ -661,21 +584,23 @@ function ProductDetailPage({ product, onBack }: { product: Product; onBack: () =
             </div>
 
             <div className="flex items-center gap-4 mb-6">
-              <span className="font-display text-4xl font-bold text-white">{formatPrice(product.price)}</span>
+              <span className="font-display text-4xl font-bold text-white">{formatPrice(product.price, product.currencyCode)}</span>
               <StockBadge stock={product.stock} min={product.minStock} />
             </div>
 
             <p className="text-[#93c5fd] leading-relaxed mb-6">{product.description}</p>
 
             {/* Compatibility */}
-            <div className="glass border border-[#1e3a5f] rounded-xl p-4 mb-4">
-              <h3 className="text-white font-semibold text-sm mb-3 flex items-center gap-2"><CheckCircle size={14} className="text-[#00b4d8]" /> Compatibilidad</h3>
-              <div className="flex flex-wrap gap-2">
-                {product.compatibility.map(c => (
-                  <span key={c} className="bg-[#0a2a5e] text-[#93c5fd] text-xs px-3 py-1 rounded-full border border-[#1e3a5f]">{c}</span>
-                ))}
+            {product.compatibility.length > 0 && (
+              <div className="glass border border-[#1e3a5f] rounded-xl p-4 mb-4">
+                <h3 className="text-white font-semibold text-sm mb-3 flex items-center gap-2"><CheckCircle size={14} className="text-[#00b4d8]" /> Compatibilidad</h3>
+                <div className="flex flex-wrap gap-2">
+                  {product.compatibility.map(c => (
+                    <span key={c} className="bg-[#0a2a5e] text-[#93c5fd] text-xs px-3 py-1 rounded-full border border-[#1e3a5f]">{c}</span>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Specs */}
             <div className="glass border border-[#1e3a5f] rounded-xl p-4 mb-6">
@@ -714,8 +639,8 @@ function ProductDetailPage({ product, onBack }: { product: Product; onBack: () =
         <div className="mt-12">
           <h2 className="font-display text-2xl font-bold text-white mb-4">Productos Relacionados</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {PRODUCTS.filter(p => p.id !== product.id && p.brand === product.brand).slice(0, 4).map(p => (
-              <ProductCard key={p.id} product={p} onDetail={() => {}} />
+            {products.filter(p => p.id !== product.id && (p.brand === product.brand || p.category === product.category)).slice(0, 4).map(p => (
+              <ProductCard key={p.id} product={p} onDetail={onDetail} />
             ))}
           </div>
         </div>
@@ -727,7 +652,21 @@ function ProductDetailPage({ product, onBack }: { product: Product; onBack: () =
 // ─────────────────────────────────────────────
 // HOME PAGE SECTIONS
 // ─────────────────────────────────────────────
-function FeaturedSection({ onDetail, onCatalog }: { onDetail: (p: Product) => void; onCatalog: () => void }) {
+function FeaturedSection({
+  products,
+  loading,
+  error,
+  onRetry,
+  onDetail,
+  onCatalog,
+}: {
+  products: Product[]
+  loading: boolean
+  error: string | null
+  onRetry: () => void
+  onDetail: (p: Product) => void
+  onCatalog: () => void
+}) {
   return (
     <section className="py-16 max-w-7xl mx-auto px-4">
       <div className="flex items-end justify-between mb-8">
@@ -739,11 +678,19 @@ function FeaturedSection({ onDetail, onCatalog }: { onDetail: (p: Product) => vo
           Ver todo el catálogo <ChevronRight size={16} />
         </button>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        {PRODUCTS.filter(p => p.featured).slice(0, 4).map(p => (
-          <ProductCard key={p.id} product={p} onDetail={onDetail} />
-        ))}
-      </div>
+      {loading ? (
+        <AdminLoading message="Cargando productos destacados…" />
+      ) : error ? (
+        <AdminError message={error} onRetry={onRetry} />
+      ) : products.length === 0 ? (
+        <AdminEmpty message="El catálogo está vacío. Importa el inventario desde el panel de gestión." />
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          {products.filter(p => p.featured).slice(0, 4).map(p => (
+            <ProductCard key={p.id} product={p} onDetail={onDetail} />
+          ))}
+        </div>
+      )}
       <div className="text-center mt-8">
         <button onClick={onCatalog} className="inline-flex items-center gap-2 border border-[#1565ff] text-[#1565ff] hover:bg-[#1565ff] hover:text-white px-6 py-3 rounded-xl font-semibold transition-all duration-200">
           Ver Catálogo Completo <ChevronRight size={18} />
@@ -753,7 +700,7 @@ function FeaturedSection({ onDetail, onCatalog }: { onDetail: (p: Product) => vo
   )
 }
 
-function BrandsSection() {
+function BrandsSection({ brands }: { brands: string[] }) {
   return (
     <section className="py-16 border-y border-[#1e3a5f]" style={{ background: 'linear-gradient(180deg, #060d1a 0%, #0a1f4e 50%, #060d1a 100%)' }}>
       <div className="max-w-7xl mx-auto px-4">
@@ -762,7 +709,7 @@ function BrandsSection() {
           <h2 className="font-display text-4xl font-bold text-white">Marcas que Comercializamos</h2>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          {BRANDS.map((brand, i) => (
+          {brands.slice(0, 8).map((brand, i) => (
             <div key={brand} className="glass border border-[#1e3a5f] hover:border-[#1565ff] rounded-2xl p-6 text-center transition-all duration-300 group cursor-default">
               <div className="w-12 h-12 mx-auto mb-3 flex items-center justify-center rounded-full"
                 style={{ background: `linear-gradient(135deg, ${['#1565ff', '#00b4d8', '#0ea5e9', '#38bdf8', '#1565ff', '#00b4d8', '#0ea5e9', '#38bdf8'][i]}22, ${['#1565ff', '#00b4d8', '#0ea5e9', '#38bdf8', '#1565ff', '#00b4d8', '#0ea5e9', '#38bdf8'][i]}44)` }}>
@@ -1159,21 +1106,6 @@ function AuditActionBadge({ action }: { action: AuditEntry['action'] }) {
   return <span className={`inline-flex text-xs px-2 py-0.5 rounded-full border ${styles}`}>{label}</span>
 }
 
-function ImportStatusBadge({ status }: { status: string }) {
-  const success = status === 'completed'
-  const failed = status === 'failed' || status === 'cancelled'
-  const styles = success
-    ? 'bg-green-900/40 text-green-400 border-green-800'
-    : failed
-      ? 'bg-red-900/40 text-red-400 border-red-800'
-      : 'bg-blue-900/40 text-blue-400 border-blue-800'
-  const labels: Record<string, string> = {
-    pending: 'Pendiente', validating: 'Validando', processing: 'Procesando',
-    completed: 'Completada', failed: 'Fallida', cancelled: 'Cancelada',
-  }
-  return <span className={`text-xs px-2 py-0.5 rounded-full border ${styles}`}>{labels[status] ?? status}</span>
-}
-
 // ─────────────────────────────────────────────
 // ADMIN DASHBOARD
 // ─────────────────────────────────────────────
@@ -1501,91 +1433,6 @@ function AdminInventory({ onAdd }: { onAdd: () => void }) {
   )
 }
 
-// ─────────────────────────────────────────────
-// ADMIN IMPORT
-// ─────────────────────────────────────────────
-function AdminImport() {
-  const [history, setHistory] = useState<ImportHistoryEntry[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  const loadHistory = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      setHistory(await getImportHistory())
-    } catch {
-      setError('No fue posible consultar el historial de importaciones.')
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    void loadHistory()
-  }, [loadHistory])
-
-  return (
-    <div className="space-y-6">
-      <div className="glass border border-[#1e3a5f] rounded-xl p-6">
-        <div className="flex items-start gap-4">
-          <div className="w-11 h-11 rounded-xl bg-[#1565ff]/15 border border-[#1565ff]/30 flex items-center justify-center flex-shrink-0">
-            <FileSpreadsheet size={20} className="text-[#00b4d8]" />
-          </div>
-          <div className="flex-1">
-            <h3 className="font-display font-bold text-white">Importación Excel conectada a Supabase</h3>
-            <p className="text-[#93c5fd] text-sm mt-1 leading-relaxed">
-              El historial mostrado abajo proviene de la base de datos. El procesador seguro de archivos se habilitará
-              mediante una función de servidor; no se simularán importaciones ni resultados desde el navegador.
-            </p>
-          </div>
-          <button onClick={loadHistory} disabled={loading} className="p-2 rounded-lg glass text-[#93c5fd] hover:text-white disabled:opacity-50" aria-label="Actualizar historial">
-            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-          </button>
-        </div>
-      </div>
-
-      {error && <AdminError message={error} onRetry={loadHistory} />}
-
-      <div className="glass border border-[#1e3a5f] rounded-xl overflow-hidden">
-        <div className="px-5 py-3 border-b border-[#1e3a5f]">
-          <h3 className="font-display font-bold text-white text-sm flex items-center gap-2">
-            <History size={15} className="text-[#00b4d8]" /> Historial real de importaciones
-          </h3>
-        </div>
-        {loading ? <AdminLoading message="Consultando importaciones…" compact /> : history.length === 0 ? (
-          <AdminEmpty message="Todavía no se han procesado importaciones." />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-[#0a1628] border-b border-[#1e3a5f]">
-                  {['Archivo', 'Usuario', 'Estado', 'Fecha', 'Filas', 'Creados', 'Actualizados', 'Errores'].map(header => (
-                    <th key={header} className="px-4 py-2.5 text-left text-xs text-[#64748b] font-medium">{header}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {history.map(entry => (
-                  <tr key={entry.id} className="border-b border-[#1e3a5f]/50 table-row-hover transition-colors">
-                    <td className="px-4 py-3 text-white text-xs">{entry.fileName}</td>
-                    <td className="px-4 py-3 text-[#93c5fd] text-xs">{entry.userEmail ?? 'Sistema'}</td>
-                    <td className="px-4 py-3"><ImportStatusBadge status={entry.status} /></td>
-                    <td className="px-4 py-3 font-mono text-xs text-[#64748b]">{formatDate(entry.createdAt)}</td>
-                    <td className="px-4 py-3 text-white font-mono text-xs">{entry.totalRows}</td>
-                    <td className="px-4 py-3 text-green-400 font-mono text-xs">{entry.createdCount}</td>
-                    <td className="px-4 py-3 text-blue-400 font-mono text-xs">{entry.updatedCount}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-red-400">{entry.errorCount}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
 function AdminAudit() {
   const [search, setSearch] = useState('')
   const [rows, setRows] = useState<AuditEntry[]>([])
@@ -1790,7 +1637,13 @@ function AdminPlaceholder({ title, icon: Icon }: { title: string; icon: React.Co
 // ─────────────────────────────────────────────
 // ADMIN PANEL WRAPPER
 // ─────────────────────────────────────────────
-function AdminPanel({ onPublic }: { onPublic: () => void }) {
+function AdminPanel({
+  onPublic,
+  onCatalogChanged,
+}: {
+  onPublic: () => void
+  onCatalogChanged: () => Promise<void> | void
+}) {
   const { profile, signOut } = useAuth()
   const [adminView, setAdminView] = useState<AdminView>('dashboard')
   const [collapsed, setCollapsed] = useState(false)
@@ -1850,11 +1703,21 @@ function AdminPanel({ onPublic }: { onPublic: () => void }) {
 
           {adminView === 'dashboard' && <AdminDashboard onAudit={() => setAdminView('audit')} />}
           {adminView === 'inventory' && <AdminInventory onAdd={() => setAdminView('products')} />}
-          {adminView === 'import' && <AdminImport />}
+          {adminView === 'import' && (
+            <InventoryImportPanel
+              canImport={profile.permissions.includes('imports.manage')}
+              onImported={onCatalogChanged}
+            />
+          )}
           {adminView === 'audit' && <AdminAudit />}
           {adminView === 'notifications' && <AdminNotifications onCountChange={setNotifCount} />}
           {adminView === 'users' && <UserManagement currentUser={profile} />}
-          {adminView === 'products' && <AdminPlaceholder title="Gestión de Productos" icon={Package} />}
+          {adminView === 'products' && (
+            <ProductImageManager
+              canManage={profile.permissions.includes('products.manage')}
+              onCatalogChanged={onCatalogChanged}
+            />
+          )}
           {adminView === 'categories' && <AdminPlaceholder title="Gestión de Categorías" icon={Tag} />}
           {adminView === 'brands' && <AdminPlaceholder title="Gestión de Marcas" icon={Award} />}
           {adminView === 'suppliers' && <AdminPlaceholder title="Gestión de Proveedores" icon={Truck} />}
@@ -1871,14 +1734,40 @@ function AdminPanel({ onPublic }: { onPublic: () => void }) {
 // ─────────────────────────────────────────────
 // HOME PAGE (assembled)
 // ─────────────────────────────────────────────
-function HomePage({ onSearch, onDetail, onCatalog }: {
-  onSearch: (q: string) => void; onDetail: (p: Product) => void; onCatalog: () => void
+function HomePage({
+  products,
+  catalogLoading,
+  catalogError,
+  onCatalogRetry,
+  onSearch,
+  onDetail,
+  onCatalog,
+}: {
+  products: Product[]
+  catalogLoading: boolean
+  catalogError: string | null
+  onCatalogRetry: () => void
+  onSearch: (q: string) => void
+  onDetail: (p: Product) => void
+  onCatalog: () => void
 }) {
+  const brands = useMemo(
+    () => Array.from(new Set(products.map(product => product.brand))).sort((a, b) => a.localeCompare(b, 'es')),
+    [products],
+  )
+
   return (
     <>
       <HeroSection onSearch={onSearch} />
-      <FeaturedSection onDetail={onDetail} onCatalog={onCatalog} />
-      <BrandsSection />
+      <FeaturedSection
+        products={products}
+        loading={catalogLoading}
+        error={catalogError}
+        onRetry={onCatalogRetry}
+        onDetail={onDetail}
+        onCatalog={onCatalog}
+      />
+      <BrandsSection brands={brands} />
       <ServicesSection />
       <FAQSection />
       <TestimonialsSection />
@@ -1893,9 +1782,33 @@ function HomePage({ onSearch, onDetail, onCatalog }: {
 export default function App() {
   const { session, profile, loading: authLoading, authError, signOut } = useAuth()
   const [view, setView] = useState<View>('home')
+  const [products, setProducts] = useState<Product[]>([])
+  const [catalogLoading, setCatalogLoading] = useState(true)
+  const [catalogError, setCatalogError] = useState<string | null>(null)
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [catalogQuery, setCatalogQuery] = useState('')
   const [navSection, setNavSection] = useState('inicio')
+
+  const loadCatalog = useCallback(async () => {
+    setCatalogLoading(true)
+    setCatalogError(null)
+
+    try {
+      const nextProducts = await getPublicCatalog()
+      setProducts(nextProducts)
+      setSelectedProduct(current =>
+        current ? nextProducts.find(product => product.id === current.id) ?? current : null,
+      )
+    } catch {
+      setCatalogError('No fue posible cargar el catálogo desde Supabase.')
+    } finally {
+      setCatalogLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadCatalog()
+  }, [loadCatalog])
 
   const goToProduct = (p: Product) => {
     setSelectedProduct(p)
@@ -1960,7 +1873,7 @@ export default function App() {
       )
     }
 
-    return <AdminPanel onPublic={returnToPublic} />
+    return <AdminPanel onPublic={returnToPublic} onCatalogChanged={loadCatalog} />
   }
 
   return (
@@ -1974,6 +1887,10 @@ export default function App() {
 
       {view === 'home' && (
         <HomePage
+          products={products}
+          catalogLoading={catalogLoading}
+          catalogError={catalogError}
+          onCatalogRetry={() => void loadCatalog()}
           onSearch={q => goToCatalog(q)}
           onDetail={goToProduct}
           onCatalog={() => goToCatalog()}
@@ -1981,6 +1898,10 @@ export default function App() {
       )}
       {view === 'catalog' && (
         <CatalogPage
+          products={products}
+          loading={catalogLoading}
+          error={catalogError}
+          onRetry={() => void loadCatalog()}
           onDetail={goToProduct}
           initialQuery={catalogQuery}
         />
@@ -1988,6 +1909,8 @@ export default function App() {
       {view === 'product' && selectedProduct && (
         <ProductDetailPage
           product={selectedProduct}
+          products={products}
+          onDetail={goToProduct}
           onBack={() => { setView('catalog'); window.scrollTo({ top: 0 }) }}
         />
       )}
