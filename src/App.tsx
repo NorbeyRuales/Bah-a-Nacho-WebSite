@@ -1723,6 +1723,7 @@ function AdminPanel({
           {adminView === 'products' && (
             <ProductImageManager
               canManage={profile.permissions.includes('products.manage')}
+              canManageStock={profile.permissions.includes('inventory.manage')}
               onCatalogChanged={onCatalogChanged}
             />
           )}

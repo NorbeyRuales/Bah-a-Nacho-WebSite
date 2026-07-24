@@ -75,6 +75,7 @@ Formatos permitidos: JPEG, PNG, WebP y AVIF. Tamaño máximo: 10 MiB.
 - `202607230009_secure_public_catalog.sql`: RPC pública de catálogo y cierre del acceso directo a códigos, costos, stock exacto, motores e imágenes.
 - `202607240010_retryable_inventory_imports.sql`: marca como fallidas las importaciones con errores y permite reintentar el mismo archivo después de corregir el problema.
 - `202607240011_fix_excel_imports_updated_at.sql`: agrega la marca de modificación requerida por el trigger del historial de importaciones.
+- `202607240012_admin_product_management.sql`: creación y edición manual segura de productos con ajuste transaccional de inventario.
 
 ## Separación entre ERP y catálogo público
 
@@ -98,6 +99,14 @@ Mapeo del informe **Saldos de Productos**:
 - `Descripcion Corta` y `DesCripcion Larga` → descripción cuando contienen datos.
 
 El campo `Valor` no se guarda como precio porque representa el valor total del inventario. La huella SHA-256 impide procesar dos veces el mismo archivo completado sin errores; una ejecución con errores queda como fallida y puede reintentarse. El original queda en el bucket privado `inventory-imports` y cada ejecución queda registrada en `excel_imports`.
+
+## Gestión manual de productos
+
+Desde **Panel de gestión → Productos** se pueden crear productos y modificar referencia, código del fabricante, nombre, descripción, marca, categoría, subcategoría, precios, moneda, IVA, stock mínimo y máximo, estado, peso, dimensiones, ubicación, existencias e imágenes.
+
+El código interno se define al crear el producto y queda protegido después, porque es la clave con la que el ERP identifica cada registro. Si el mismo código aparece más adelante en un Excel, la importación actualiza ese producto en lugar de duplicarlo.
+
+El stock nunca se escribe directamente en `inventory_balances`. `admin_save_product(...)` calcula la diferencia y genera un movimiento `adjustment`; por eso la modificación manual conserva el kardex, el usuario responsable y la auditoría. Los campos incluidos en el informe del ERP pueden volver a ser actualizados por una importación posterior.
 
 ## Integración del panel web
 
